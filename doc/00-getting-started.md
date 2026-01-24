@@ -17,36 +17,15 @@ Welcome to Koi! This guide will get you from zero to running your first agent in
 
 ## Installation
 
-### Step 1: Clone the Repository
+For complete installation instructions, see [Installation Guide](00-installation.md).
+
+**Quick install:**
 
 ```bash
-git clone <repo-url>
-cd koi
+curl -fsSL https://raw.githubusercontent.com/koi-language/koi/main/install.sh | bash
 ```
 
-### Step 2: Install Dependencies
-
-```bash
-npm install
-```
-
-### Step 3: Build the Grammar
-
-Koi uses a PEG (Parsing Expression Grammar) parser that needs to be built:
-
-```bash
-npm run build:grammar
-```
-
-### Step 4: Install Globally (Optional)
-
-For convenience, install Koi globally so you can use the `koi` command from anywhere:
-
-```bash
-npm install -g .
-```
-
-After global installation, verify it works:
+After installation, verify it works:
 
 ```bash
 koi version
