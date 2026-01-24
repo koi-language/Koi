@@ -1,6 +1,6 @@
 {
   "name": "@koi-language/koi",
-  "version": "1.0.1",
+  "version": "1.0.6",
   "description": "Koi - Agent-first language. Calm orchestration.",
   "type": "module",
   "main": "src/runtime/index.js",
@@ -65,14 +65,14 @@
     "openai": "^6.16.0",
     "peggy": "^5.0.6",
     "source-map": "^0.7.6",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
     "ws": "^8.19.0"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^25.0.10",
     "jest": "^30.2.0",
-    "ts-jest": "^29.4.6",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "ts-jest": "^29.4.6"
   }
 }

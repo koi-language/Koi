@@ -489,30 +489,27 @@ async function initProject(projectName) {
 package "${projectName}"
 
 role Worker { can execute }
-role Lead { can delegate }
 
-Agent HelloAgent : Worker {
+// Agent with LLM playbook - generates creative greetings
+Agent Greeter : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini" }
+
   on greet(args: Json) {
-    const name = args.name
-    return { message: "Hello from ${projectName}, " + name + "!" }
+    playbook """
+    Generate a friendly and creative greeting for \${args.name}.
+
+    The greeting should:
+    - Start with "Hello"
+    - Include the person's name
+    - Add a motivational message or fun fact
+    - Be brief (2-3 sentences)
+
+    Return JSON: { "greeting": "your greeting here", "emoji": "an appropriate emoji" }
+    """
   }
 }
 
-Team MainTeam {
-  hello = HelloAgent
-}
-
-Agent Orchestrator : Lead {
-  uses Team MainTeam
-
-  on start(args: Json) {
-    const result =
-      await send peers.event("greet").role(Worker).any()({ name: "World" }) timeout 5s
-    return result
-  }
-}
-
-run Orchestrator.start({})
+run Greeter.greet({ name: "World" })
 `;
 
   fs.writeFileSync(path.join(projectPath, 'src', 'main.koi'), exampleCode);
