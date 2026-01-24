@@ -72,7 +72,9 @@
       "Bash(git push:*)",
       "Bash(gh pr create:*)",
       "Bash(git merge:*)",
-      "Bash(md5:*)"
+      "Bash(md5:*)",
+      "Bash(git rebase:*)",
+      "Bash(GIT_EDITOR=true git rebase:*)"
     ]
   }
 }

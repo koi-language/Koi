@@ -136,6 +136,30 @@ export class IncrementalJSONParser {
       actions.push(...objects);
     }
 
+    // If no "actions" array was found, the LLM returned raw JSON
+    // Wrap it in a return action so it can be executed properly
+    if (this.actionsStartIndex === -1 && this.buffer.length > 0) {
+      try {
+        const rawJSON = JSON.parse(this.buffer.trim());
+        // Check if it's not already an action (has actionType or intent)
+        if (!rawJSON.actionType && !rawJSON.actions) {
+          if (process.env.KOI_DEBUG_LLM) {
+            console.error(`[IncrementalParser] ⚠️ No "actions" array found - wrapping raw JSON in return action`);
+          }
+          return [{
+            actionType: 'direct',
+            intent: 'return',
+            data: rawJSON
+          }];
+        }
+      } catch (e) {
+        // Not valid JSON, return whatever objects we found
+        if (process.env.KOI_DEBUG_LLM) {
+          console.error(`[IncrementalParser] ⚠️ Failed to parse raw response as JSON: ${e.message}`);
+        }
+      }
+    }
+
     return actions;
   }
 
