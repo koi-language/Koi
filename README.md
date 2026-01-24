@@ -55,94 +55,15 @@ See [doc/07-routing.md](doc/07-routing.md) and [doc/08-task-chaining.md](doc/08-
 
 ## Installation
 
-### Quick Install (Recommended)
-
-Install KOI with a single command:
+**Quick install (recommended):**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/koi-language/koi/main/install.sh | bash
 ```
 
-This will:
-- ✅ Check for Node.js >= 18.0.0 and npm
-- ✅ Install KOI to `~/.koi`
-- ✅ Add the `koi` command to your PATH
-- ✅ Build the grammar and set everything up
+This will install KOI to `~/.koi` and add the `koi` command to your PATH.
 
-After installation completes, restart your shell or run:
-```bash
-source ~/.bashrc  # or ~/.zshrc, ~/.bash_profile, etc.
-```
-
-Then verify the installation:
-```bash
-koi --version
-```
-
-### Manual Installation
-
-#### Local Development
-
-For working on Koi itself:
-
-```bash
-git clone https://github.com/koi-language/koi.git
-cd koi
-npm install
-npm run build:grammar
-```
-
-**Development with local runtime:**
-
-When developing Koi, use `KOI_RUNTIME_PATH` to point to your local runtime without reinstalling:
-
-```bash
-# Set environment variable
-export KOI_RUNTIME_PATH=/path/to/koi/src/runtime
-
-# Or use .env.development file (copy and edit)
-cp .env.development .env
-# Edit KOI_RUNTIME_PATH to point to your local Koi installation
-
-# Now run projects - they'll use your local runtime
-koi run examples/hello-world.koi
-```
-
-This allows you to modify the runtime and test changes immediately without `npm install -g` each time.
-
-#### Global Installation (Alternative)
-
-If you prefer npm, install Koi as a global command:
-
-```bash
-# From local clone
-npm install -g .
-
-# Or from npm (when published)
-npm install -g koi-lang
-```
-
-After global installation, you can use `koi` directly:
-
-```bash
-koi run examples/hello-world.koi
-koi compile examples/simple.koi
-koi version
-koi help
-```
-
-#### Uninstall
-
-For quick install method:
-```bash
-rm -rf ~/.koi
-# Remove PATH entry from your shell config (~/.bashrc, ~/.zshrc, etc.)
-```
-
-For npm install:
-```bash
-npm uninstall -g koi-lang
-```
+**For manual installation, development setup, and troubleshooting:** See the [Installation Guide](doc/00-installation.md).
 
 ## Editor Support
 
@@ -542,7 +463,8 @@ Koi generates source maps automatically. Runtime errors show the location in the
 
 Comprehensive documentation is available in the [doc/](doc/) directory:
 
-- **[Getting Started](doc/00-getting-started.md)** - Installation and your first agent
+- **[Installation Guide](doc/00-installation.md)** - Complete installation instructions, manual setup, and troubleshooting
+- **[Getting Started](doc/00-getting-started.md)** - Your first agent and basic workflow
 - **[Core Concepts](doc/01-core-concepts.md)** - Understanding Roles, Agents, Teams, Skills
 - **[Syntax Basics](doc/02-syntax-basics.md)** - Variables, types, control flow
 - **[Agents Guide](doc/03-agents.md)** - Creating and using agents
