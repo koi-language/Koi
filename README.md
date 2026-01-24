@@ -2,6 +2,11 @@
 
 **Agent-first language. Calm orchestration.** 🌊
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![GitHub](https://img.shields.io/badge/GitHub-koi--language%2Fkoi-6495ED?logo=github)](https://github.com/koi-language/koi)
+[![VSCode Extension](https://img.shields.io/badge/VSCode-Extension-007ACC?logo=visualstudiocode)](vscode-koi-extension/)
+[![Syntax Highlighting](https://img.shields.io/badge/GitHub-Syntax_Highlighting-6495ED?logo=github)](LINGUIST.md)
+
 Koi is a multi-agent orchestration language with role-based routing.
 
 > **🚀 New to Koi?** Check out the [Quick Start Guide](QUICKSTART.md) for a 2-minute setup!
@@ -46,11 +51,39 @@ See [doc/07-routing.md](doc/07-routing.md) and [doc/08-task-chaining.md](doc/08-
 
 ## Installation
 
-### Local Development
+### Quick Install (Recommended)
+
+Install KOI with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/koi-language/koi/main/install.sh | bash
+```
+
+This will:
+- ✅ Check for Node.js >= 18.0.0 and npm
+- ✅ Install KOI to `~/.koi`
+- ✅ Add the `koi` command to your PATH
+- ✅ Build the grammar and set everything up
+
+After installation completes, restart your shell or run:
+```bash
+source ~/.bashrc  # or ~/.zshrc, ~/.bash_profile, etc.
+```
+
+Then verify the installation:
+```bash
+koi --version
+```
+
+### Manual Installation
+
+#### Local Development
 
 For working on Koi itself:
 
 ```bash
+git clone https://github.com/koi-language/koi.git
+cd koi
 npm install
 npm run build:grammar
 ```
@@ -73,17 +106,15 @@ koi run examples/hello-world.koi
 
 This allows you to modify the runtime and test changes immediately without `npm install -g` each time.
 
-### Global Installation
+#### Global Installation (Alternative)
 
-Install Koi as a global command:
+If you prefer npm, install Koi as a global command:
 
 ```bash
+# From local clone
 npm install -g .
-```
 
-Or from npm (when published):
-
-```bash
+# Or from npm (when published)
 npm install -g koi-lang
 ```
 
@@ -92,13 +123,19 @@ After global installation, you can use `koi` directly:
 ```bash
 koi run examples/hello-world.koi
 koi compile examples/simple.koi
-koi init my-project
 koi version
 koi help
 ```
 
-### Uninstall
+#### Uninstall
 
+For quick install method:
+```bash
+rm -rf ~/.koi
+# Remove PATH entry from your shell config (~/.bashrc, ~/.zshrc, etc.)
+```
+
+For npm install:
 ```bash
 npm uninstall -g koi-lang
 ```
@@ -126,6 +163,31 @@ ln -s "$(pwd)" ~/.cursor/extensions/koi-lang  # Cursor
 - 🎯 Semantic token colors
 
 See [vscode-koi-extension/README.md](vscode-koi-extension/README.md) for details.
+
+## GitHub Syntax Highlighting
+
+KOI code blocks in markdown files (README, Issues, PRs) automatically get syntax highlighting on GitHub!
+
+````markdown
+```koi
+Agent Hello : Worker {
+  on greet(args: Json) {
+    console.log("Hello from KOI!")
+  }
+}
+```
+````
+
+**Status:**
+- ✅ **Current**: Using JavaScript highlighting (very similar syntax)
+- 🚀 **Soon**: Native KOI highlighting (PR submitted to [github/linguist](https://github.com/github/linguist))
+
+Once the PR is merged, GitHub will recognize `.koi` files with:
+- 🎨 Cornflower Blue (#6495ED) in language statistics
+- ✨ Full syntax highlighting for code blocks
+- 📊 Language detection in repositories
+
+See [LINGUIST.md](LINGUIST.md) for technical details and contribution status.
 
 ## Usage
 
@@ -514,9 +576,37 @@ Comprehensive documentation is available in the [doc/](doc/) directory:
   - [X] Execution tracking and summaries
 - [X] TypeScript/JavaScript import support
 - [X] Unit testing with Jest
+- [X] VSCode/Cursor extension with syntax highlighting
+- [X] GitHub syntax highlighting support
 - [ ] Skills registry and marketplace
 - [ ] Visual debugging
 - [ ] Hot reload in development
+
+## Contributing
+
+Contributions are welcome! Here are some ways you can help:
+
+- 🐛 Report bugs and issues
+- 💡 Suggest new features or improvements
+- 📝 Improve documentation
+- 🎨 Help with GitHub Linguist PR (see [LINGUIST.md](LINGUIST.md))
+- 🔧 Submit pull requests
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Resources
+
+- **Documentation**: [doc/](doc/) - Comprehensive guides
+- **Quick Start**: [QUICKSTART.md](QUICKSTART.md) - 2-minute setup
+- **Examples**: [examples/](examples/) - Working code samples
+- **VSCode Extension**: [vscode-koi-extension/](vscode-koi-extension/)
+- **AI Assistant Guide**: [CLAUDE.md](CLAUDE.md) - Architecture and patterns
+- **Syntax Highlighting**: [LINGUIST.md](LINGUIST.md) - GitHub support status
+
+## Community
+
+- **Issues**: [github.com/koi-language/koi/issues](https://github.com/koi-language/koi/issues)
+- **Discussions**: [github.com/koi-language/koi/discussions](https://github.com/koi-language/koi/discussions)
 
 ## License
 
