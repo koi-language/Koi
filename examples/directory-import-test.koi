@@ -1,0 +1,84 @@
+// ============================================================
+// Directory Import Test
+// Tests importing from directories (looks for index.koi)
+// ============================================================
+
+package "demo.koi.directory"
+
+// Import from directory - automatically finds index.koi
+import "./skills/advanced"
+
+role Worker { can work }
+
+// Agent that uses skills from the directory import
+Agent StatisticsProcessor : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini", temperature: 0.1, max_tokens: 300 }
+  uses Skill StatisticalAnalysis
+
+  on process(args: Json) {
+    playbook """
+    Process statistical analysis for: ${JSON.stringify(args)}
+
+    Pass the "numbers" array to the tool and return the result.
+    """
+  }
+}
+
+Team WorkerTeam {
+  processor = StatisticsProcessor
+  analyzer = DataAnalyzer  // Agent from the imported directory
+}
+
+// Demo runner
+Agent DemoRunner : Worker {
+  uses Team WorkerTeam
+
+  on runTest(args: Json) {
+    console.log("╔════════════════════════════════════════════╗")
+    console.log("║  Directory Import Test                     ║")
+    console.log("║  import \"./skills/advanced\"                ║")
+    console.log("╚════════════════════════════════════════════╝\n")
+
+    // Test 1: Calculate mean using skill directly
+    console.log("📋 Test 1: Calculate mean of [10, 20, 30, 40, 50]")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    const meanResult =
+      await send peers.event("process").role(Worker).any()({
+        operation: "mean",
+        numbers: [10, 20, 30, 40, 50]
+      }) timeout 10s
+
+    console.log("Result:", JSON.stringify(meanResult, null, 2))
+
+    // Test 2: Calculate median
+    console.log("\n📋 Test 2: Calculate median of [1, 3, 5, 7, 9, 11]")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    const medianResult =
+      await send peers.event("process").role(Worker).any()({
+        operation: "median",
+        numbers: [1, 3, 5, 7, 9, 11]
+      }) timeout 10s
+
+    console.log("Result:", JSON.stringify(medianResult, null, 2))
+
+    // Test 3: Use the imported DataAnalyzer agent
+    console.log("\n📋 Test 3: Full analysis using DataAnalyzer agent!!!!")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    const analysisResult =
+      await send peers.event("analyze").role(DataScientist).any()({
+        numbers: [15, 25, 35, 45, 55, 65, 75]
+      }) timeout 10s
+
+    console.log("Result:", JSON.stringify(analysisResult, null, 2))
+
+    return {
+      success: true,
+      tests_completed: 3
+    }
+  }
+}
+
+run DemoRunner.runTest({})

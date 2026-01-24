@@ -1,0 +1,149 @@
+package "demo.code.introspection"
+
+role Calculator { can calculate }
+role Coordinator { can coordinate }
+
+// Agent con event handler que tiene código (no playbook)
+// El sistema debe hacer introspección para generar affordance
+Agent MathProcessor : Calculator {
+  llm default = {
+    provider: "openai",
+    model: "gpt-4o-mini",
+    temperature: 0.1
+  }
+
+  // Event handler con código Koi (sin playbook)
+  // El sistema hará introspección del código para generar affordance
+  // Este handler suma todos los números en el array
+  on calculateSum(args: Json) {
+    const numbers = args.numbers
+
+    // Procesar números y sumarlos
+    const result = await send peers.event("sumArray").role(Calculator).any()({
+      data: numbers
+    }) timeout 5s
+
+    return {
+      operation: "sum",
+      result: result
+    }
+  }
+
+  // Event handler que multiplica todos los números
+  on calculateProduct(args: Json) {
+    const numbers = args.numbers
+
+    // Multiplicar los números usando delegación
+    const result = await send peers.event("multiplyArray").role(Calculator).any()({
+      data: numbers
+    }) timeout 5s
+
+    return {
+      operation: "product",
+      result: result
+    }
+  }
+
+  // Event handler con playbook (para comparar)
+  on calculateAverage(args: Json) {
+    playbook """
+    Calculate the average of ${JSON.stringify(args.numbers)}
+
+    Sum all numbers and divide by count.
+    Return: { "operation": "average", "result": <value> }
+    """
+  }
+}
+
+Team MathTeam {
+  processor = MathProcessor
+}
+
+// Coordinator que delega basándose en affordances
+Agent Coordinator : Coordinator {
+  llm default = {
+    provider: "openai",
+    model: "gpt-4o-mini",
+    temperature: 0.1
+  }
+
+  uses Team MathTeam
+
+  on process(args: Json) {
+    playbook """
+    Process this math request: ${JSON.stringify(args)}
+
+    Available operations (delegate to Calculator role):
+    - Calculate sum/total of numbers
+    - Calculate product/multiplication of numbers
+    - Calculate average/mean of numbers
+
+    Determine the intent and delegate with an action:
+    {
+      "actions": [{
+        "title": "Calculating...",
+        "intent": "<your interpretation of what math operation is needed>",
+        "data": { "numbers": ${JSON.stringify(args.numbers)} }
+      }]
+    }
+    """
+  }
+}
+
+Team CoordinatorTeam {
+  coordinator = Coordinator
+}
+
+Agent Main : Coordinator {
+  uses Team CoordinatorTeam
+
+  on start(args: Json) {
+    console.log("╔════════════════════════════════════════════╗")
+    console.log("║  Code Introspection Test                   ║")
+    console.log("║  Event handlers with source code           ║")
+    console.log("╚════════════════════════════════════════════╝\n")
+
+    // Test 1: Request sum (should route to calculateSum)
+    console.log("📋 Test 1: Calculate the total")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    const sumResult =
+      await send peers.event("process").role(Coordinator).any()({
+        operation: "calculate the total of these numbers",
+        numbers: [5, 10, 15, 20]
+      }) timeout 30s
+
+    console.log("Result:", JSON.stringify(sumResult, null, 2))
+
+    // Test 2: Request product (should route to calculateProduct)
+    console.log("\n📋 Test 2: Multiply all numbers")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    const productResult =
+      await send peers.event("process").role(Coordinator).any()({
+        operation: "multiply all the numbers together",
+        numbers: [2, 3, 4, 5]
+      }) timeout 30s
+
+    console.log("Result:", JSON.stringify(productResult, null, 2))
+
+    // Test 3: Request average (should route to calculateAverage with playbook)
+    console.log("\n📋 Test 3: Find the average")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    const avgResult =
+      await send peers.event("process").role(Coordinator).any()({
+        operation: "find the average value",
+        numbers: [10, 20, 30, 40, 50]
+      }) timeout 30s
+
+    console.log("Result:", JSON.stringify(avgResult, null, 2))
+
+    return {
+      success: true,
+      tests_completed: 3
+    }
+  }
+}
+
+run Main.start({})

@@ -1,0 +1,67 @@
+package "test.npm.import"
+
+// Import lodash from node_modules
+import "lodash"
+
+role Worker { can work }
+
+Agent DataProcessor : Worker {
+  on process(args: Json) {
+    console.log("=".repeat(60))
+    console.log("Testing NPM Package Import (lodash)")
+    console.log("=".repeat(60))
+
+    // Test chunk
+    const chunked = lodash.chunk([1, 2, 3, 4, 5, 6, 7, 8], 3)
+    console.log("\nTest 1: chunk([1-8], 3) =", JSON.stringify(chunked))
+
+    // Test uniq
+    const unique = lodash.uniq([1, 2, 2, 3, 3, 3, 4, 5, 5])
+    console.log("Test 2: uniq([1,2,2,3,3,3,4,5,5]) =", JSON.stringify(unique))
+
+    // Test pick
+    const obj = { a: 1, b: 2, c: 3, d: 4 }
+    const picked = lodash.pick(obj, ["a", "c"])
+    console.log("Test 3: pick({a:1,b:2,c:3,d:4}, ['a','c']) =", JSON.stringify(picked))
+
+    // Test sum
+    const total = lodash.sum([1, 2, 3, 4, 5])
+    console.log("Test 4: sum([1,2,3,4,5]) =", total)
+
+    // Test mean
+    const avg = lodash.mean([10, 20, 30, 40, 50])
+    console.log("Test 5: mean([10,20,30,40,50]) =", avg)
+
+    // Test reverse
+    const reversed = lodash.reverse([1, 2, 3, 4, 5])
+    console.log("Test 6: reverse([1,2,3,4,5]) =", JSON.stringify(reversed))
+
+    // Test max
+    const maximum = lodash.max([10, 50, 30, 20, 40])
+    console.log("Test 7: max([10,50,30,20,40]) =", maximum)
+
+    // Test min
+    const minimum = lodash.min([10, 50, 30, 20, 40])
+    console.log("Test 8: min([10,50,30,20,40]) =", minimum)
+
+    console.log("\n" + "=".repeat(60))
+    console.log("All lodash tests completed!")
+    console.log("=".repeat(60))
+
+    return {
+      success: true,
+      tests: {
+        chunked: chunked,
+        unique: unique,
+        picked: picked,
+        sum: total,
+        mean: avg,
+        reversed: reversed,
+        max: maximum,
+        min: minimum
+      }
+    }
+  }
+}
+
+run DataProcessor.process({})

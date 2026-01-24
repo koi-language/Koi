@@ -1,0 +1,10 @@
+package "test"
+
+role Worker { can execute }
+
+Agent A : Worker {
+on test(args: Json) {
+const x = 5
+return { x: x }
+}
+}

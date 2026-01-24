@@ -1,0 +1,52 @@
+package "test.delegation"
+
+role Worker { can execute }
+
+// Simple translator agent
+Agent Translator : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini" }
+
+  on translate(args: Json) {
+    playbook """
+    Translate "${args.text}" to ${args.language}.
+    Return JSON: { "translated": "translated text here" }
+    """
+  }
+}
+
+// Simple counter agent
+Agent WordCounter : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini" }
+
+  on count(args: Json) {
+    playbook """
+    Count words in: "${args.text}"
+    Return JSON: { "wordCount": number }
+    """
+  }
+}
+
+// Orchestrator that chains tasks
+Agent Orchestrator : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini" }
+
+  on processText(args: Json) {
+    playbook """
+    Task: Translate "${args.text}" to Spanish, then count the words.
+
+    Create a plan with 2 actions:
+    1. Translate the text to Spanish
+    2. Count the words in the translation
+
+    Return JSON with actions array:
+    {
+      "actions": [
+        { "intent": "translate to spanish", "data": { "text": "${args.text}", "language": "spanish" } },
+        { "intent": "count words", "data": { "text": "\${previousResult.translated}" } }
+      ]
+    }
+    """
+  }
+}
+
+run Orchestrator.processText({ text: "hello world" })

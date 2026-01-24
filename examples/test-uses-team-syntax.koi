@@ -1,0 +1,25 @@
+package "test.uses.team"
+
+role Worker { can work }
+
+Agent TestAgent : Worker {
+  on work(args: Json) {
+    return { result: "working" }
+  }
+}
+
+Team TestTeam {
+  worker = TestAgent
+}
+
+Agent MainAgent : Worker {
+  // Esta sintaxis SÍ debe funcionar
+  uses Team TestTeam
+
+  on start(args: Json) {
+    const result = await send peers.event("work").role(Worker).any()({}) timeout 5s
+    return result
+  }
+}
+
+run MainAgent.start({})

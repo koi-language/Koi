@@ -1,0 +1,90 @@
+// ============================================================
+// Koi — Sentiment Analysis Skill Demo
+// Skill with agents using playbooks ONLY (LLM execution)
+// ============================================================
+
+package "demo.koi.sentiment"
+
+role Worker   { can execute, can propose }
+role Reviewer { can critique, can approve }
+
+Skill SentimentAnalysis {
+  affordance """
+  Analyzes text sentiment and returns positive/neutral/negative classification.
+  Uses 2 agents: Analyst (drafts analysis) + Reviewer (validates and normalizes).
+  Both agents use playbooks executed by LLM.
+  """
+
+  // Agent with ONLY playbook (LLM executes this)
+  Agent Analyst : Worker {
+    llm default = { provider: "openai", model: "gpt-4o-mini", temperature: 0.3, max_tokens: 300 }
+
+    on analyze(args: Json) {
+      playbook """
+You are a sentiment analysis expert. Analyze the sentiment of the text provided in args.text.
+
+Your task:
+1. Determine if the sentiment is positive, neutral, or negative
+2. Assign a confidence score between 0 and 1
+3. Provide a brief rationale (max 100 characters)
+
+Return ONLY this exact JSON structure (no markdown, no explanations):
+{
+  "label": "positive|neutral|negative",
+  "score": 0.85,
+  "rationale": "Brief explanation here"
+}
+
+Rules:
+- Base your analysis ONLY on the provided text
+- If ambiguous, use "neutral" with score ~0.5
+- Keep rationale under 100 characters
+      """
+    }
+  }
+
+  // Agent with ONLY playbook (LLM executes this)
+  Agent Reviewer : Reviewer {
+    llm default = { provider: "openai", model: "gpt-4o-mini", temperature: 0.0, max_tokens: 200 }
+
+    on normalize(args: Json) {
+      playbook """
+You are a quality reviewer. Validate and normalize the sentiment analysis draft in args.draft.
+
+Your task:
+1. Ensure label is exactly "positive", "neutral", or "negative"
+2. Ensure score is a number between 0 and 1
+3. Ensure rationale is under 100 characters
+4. Fix any issues while preserving the original intent
+
+Return ONLY this exact JSON structure (no markdown, no explanations):
+{
+  "label": "positive|neutral|negative",
+  "score": 0.85,
+  "rationale": "Brief explanation here"
+}
+
+If the draft is missing fields, fill them conservatively (neutral, score 0.5).
+      """
+    }
+  }
+
+  Team Internal {
+    analyst  = Analyst
+    reviewer = Reviewer
+  }
+
+  export async function run(input: any): Promise<any> {
+    const text = "I absolutely love this product! It works perfectly and exceeded all my expectations."
+
+    const draft =
+      await send Internal.event("analyze").role(Worker).any()({ text: text }) timeout 15s
+
+    const final =
+      await send Internal.event("normalize").role(Reviewer).any()({ draft: draft }) timeout 10s
+
+    return final
+  }
+}
+
+run SentimentAnalysis.run({})

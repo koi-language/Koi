@@ -1,0 +1,43 @@
+// Test: Imports
+// Tests import statement
+package "test.imports"
+
+// Note: In real usage, these would import from actual files
+// For testing, we'll demonstrate the syntax
+
+// Import example (syntax demonstration)
+// import "./utils/helpers.koi"
+// import "../shared/skills.koi"
+
+role Worker { can execute }
+
+// For this test, we define everything locally
+Skill LocalUtils {
+  affordance "Local utilities for testing"
+
+  export function helper(args: Json): Json {
+    return { message: "Helper function called", input: args.value }
+  }
+}
+
+Agent ImportTest : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini", temperature: 0.1, max_tokens: 100 }
+  uses Skill LocalUtils
+
+  on testLocalImport(args: Json) {
+    playbook """
+    Use the available helper function to process the value "test".
+    Return the result as JSON.
+    """
+  }
+}
+
+// Package declaration test
+Agent PackageTest : Worker {
+  on showPackage(args: Json) {
+    console.log("Package: test.imports")
+    return { package: "test.imports" }
+  }
+}
+
+run ImportTest.testLocalImport({})

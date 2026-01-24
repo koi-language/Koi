@@ -1,0 +1,31 @@
+// Simple test for registry operations
+package "test.simple"
+
+role Worker { can execute }
+
+Agent SimpleWorker : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini" }
+
+  on saveUser(args: Json) {
+    playbook """
+    Save a user to the registry with key "user:${args.id}" and value:
+    {
+      "name": "${args.name}",
+      "age": ${args.age},
+      "createdAt": "${Date.now()}"
+    }
+
+    Return: { "success": true, "message": "User saved" }
+    """
+  }
+
+  on getUser(args: Json) {
+    playbook """
+    Get the user from registry with key "user:${args.id}".
+    If found, return: { "found": true, "user": [the complete user object] }
+    If not found, return: { "found": false }
+    """
+  }
+}
+
+run SimpleWorker.saveUser({ id: "test1", name: "TestUser", age: 25 })

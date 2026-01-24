@@ -1,0 +1,132 @@
+// ============================================================
+// Koi — Counter Example
+// Simple stateful agent that counts using playbooks
+// ============================================================
+
+package "demo.koi.counter"
+
+role Worker { can execute }
+
+Agent Counter : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini", temperature: 0.1, max_tokens: 200 }
+
+  state {
+    count: Int = 0
+  }
+
+  on increment(args: Json) {
+    playbook """
+    You are a counter agent. Increment the internal counter by 1 and return the new value.
+
+    Current state: state.count = ${state.count}
+
+    Your task:
+    1. Calculate the new count by adding 1 to the current count
+    2. Return a JSON response with BOTH the result AND the state update
+
+    Return ONLY this exact JSON structure (no markdown, no explanations):
+    {
+      "state_updates": {
+        "count": [new count value after incrementing]
+      },
+      "count": [new count value after incrementing]
+    }
+
+    Example: If current count is 5, return:
+    {
+      "state_updates": { "count": 6 },
+      "count": 6
+    }
+    """
+  }
+
+  on get(args: Json) {
+    playbook """
+    You are a counter agent. Return the current counter value without modifying it.
+
+    Current state: state.count = ${state.count}
+
+    Return ONLY this exact JSON structure (no markdown, no explanations):
+    {
+      "count": ${state.count}
+    }
+    """
+  }
+
+  on reset(args: Json) {
+    playbook """
+    You are a counter agent. Reset the counter to zero.
+
+    Current state: state.count = ${state.count}
+
+    Your task:
+    1. Reset the counter to 0
+    2. Return a JSON response with BOTH the result AND the state update
+
+    Return ONLY this exact JSON structure (no markdown, no explanations):
+    {
+      "state_updates": {
+        "count": 0
+      },
+      "count": 0
+    }
+    """
+  }
+
+  on incrementBy(args: Json) {
+    playbook """
+    You are a counter agent. Increment the counter by a specific amount.
+
+    Current state: state.count = ${state.count}
+    Amount to increment: args.amount = ${args.amount || 1}
+
+    Your task:
+    1. Calculate the new count by adding args.amount to the current count
+    2. Return a JSON response with BOTH the result AND the state update
+
+    Return ONLY this exact JSON structure (no markdown, no explanations):
+    {
+      "state_updates": {
+        "count": [new count value]
+      },
+      "count": [new count value],
+      "incremented": [amount that was added]
+    }
+    """
+  }
+}
+
+Team CounterTeam {
+  counter = Counter
+}
+
+Agent Orchestrator : Worker {
+  uses Team CounterTeam
+
+  on start(args: Json) {
+    console.log("🔢 Counter Test Starting...")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    const r1 =
+      await send peers.event("increment").role(Worker).any()({}) timeout 5s
+    console.log("✓ After increment 1:", r1)
+
+    const r2 =
+      await send peers.event("increment").role(Worker).any()({}) timeout 5s
+    console.log("✓ After increment 2:", r2)
+
+    const r3 =
+      await send peers.event("increment").role(Worker).any()({}) timeout 5s
+    console.log("✓ After increment 3:", r3)
+
+    const current =
+      await send peers.event("get").role(Worker).any()({}) timeout 5s
+    console.log("✓ Current value:", current)
+
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    return { message: "Counter test complete ✓", final: current }
+  }
+}
+
+run Orchestrator.start({})

@@ -1,0 +1,20 @@
+// Test that permissions are enforced
+package "test.permissions.fail"
+
+// Role without execute permission
+role ReadOnly { can registry_read }
+
+// Agent without execute permission - should fail when trying to print
+Agent ReadOnlyAgent : ReadOnly {
+  llm default = { provider: "openai", model: "gpt-4o-mini" }
+
+  on test(args: Json) {
+    playbook """
+    Try to print a message (should fail due to missing execute permission).
+
+    Show: "❌ This should not appear because print requires execute permission"
+    """
+  }
+}
+
+run ReadOnlyAgent.test({})

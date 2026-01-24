@@ -1,0 +1,64 @@
+package "test.typescript.import"
+
+// Import TypeScript module
+import "./utils/math-helpers.ts"
+
+role Worker { can work }
+
+Agent MathAgent : Worker {
+  on calculate(args: Json) {
+    console.log("=".repeat(60))
+    console.log("Testing TypeScript Import")
+    console.log("=".repeat(60))
+
+    // Test simple functions
+    const sum = utils_math_helpers.add(5, 3)
+    console.log("\nTest 1: add(5, 3) =", sum)
+
+    const product = utils_math_helpers.multiply(4, 7)
+    console.log("Test 2: multiply(4, 7) =", product)
+
+    const fib10 = utils_math_helpers.fibonacci(10)
+    console.log("Test 3: fibonacci(10) =", fib10)
+
+    const is17Prime = utils_math_helpers.isPrime(17)
+    console.log("Test 4: isPrime(17) =", is17Prime)
+
+    // Test constants
+    console.log("\nTest 5: PI =", utils_math_helpers.PI)
+    console.log("Test 6: E =", utils_math_helpers.E)
+
+    // Test class instantiation
+    const calc = new utils_math_helpers.Calculator()
+    const r1 = calc.add(10, 20)
+    const r2 = calc.subtract(50, 15)
+    console.log("\nTest 7: Calculator.add(10, 20) =", r1)
+    console.log("Test 8: Calculator.subtract(50, 15) =", r2)
+
+    const history = calc.getHistory()
+    console.log("Test 9: Calculator history:", JSON.stringify(history))
+
+    console.log("\n" + "=".repeat(60))
+    console.log("All tests completed!")
+    console.log("=".repeat(60))
+
+    return {
+      success: true,
+      tests: {
+        add: sum,
+        multiply: product,
+        fibonacci: fib10,
+        isPrime: is17Prime,
+        pi: utils_math_helpers.PI,
+        e: utils_math_helpers.E,
+        calculator: {
+          add: r1,
+          subtract: r2,
+          history: history
+        }
+      }
+    }
+  }
+}
+
+run MathAgent.calculate({})
