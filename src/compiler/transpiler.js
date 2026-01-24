@@ -109,8 +109,8 @@ export class KoiTranspiler {
       code += this.emit(`// Using local runtime from KOI_RUNTIME_PATH: ${koiRuntimePath}\n`);
     } else {
       // Production mode: use package imports
-      runtimeImportPath = 'koi-lang';
-      routerImportPath = 'koi-lang/router';
+      runtimeImportPath = '@koi-language/koi';
+      routerImportPath = '@koi-language/koi/router';
     }
 
     // Store routerImportPath for later use

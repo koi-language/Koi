@@ -531,7 +531,7 @@ run Orchestrator.start({})
     author: '',
     license: 'MIT',
     dependencies: {
-      'koi-lang': '^1.0.0'
+      '@koi-language/koi': '^1.0.0'
     }
   };
 
