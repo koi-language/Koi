@@ -73,17 +73,20 @@ This will install KOI to `~/.koi` and add the `koi` command to your PATH.
 
 ## Editor Support
 
-### VS Code & Cursor Extension
-
-Get **syntax highlighting** and language support for `.koi` files:
+### VS Code
 
 ```bash
-# Quick install (from project root)
-cd vscode-koi-extension
-ln -s "$(pwd)" ~/.vscode/extensions/koi-lang  # VS Code
-ln -s "$(pwd)" ~/.cursor/extensions/koi-lang  # Cursor
+# From the Koi repository root
+ln -s "$(pwd)/vscode-koi-extension" ~/.vscode/extensions/koi-lang
+# Restart VS Code
+```
 
-# Then restart your editor
+### Cursor
+
+```bash
+# From the Koi repository root
+ln -s "$(pwd)/vscode-koi-extension" ~/.cursor/extensions/koi-lang
+# Restart Cursor
 ```
 
 **Features:**
@@ -91,9 +94,9 @@ ln -s "$(pwd)" ~/.cursor/extensions/koi-lang  # Cursor
 - 🎨 Custom "Koi Dark" theme
 - 🔤 Auto-closing brackets and quotes
 - 📝 Special playbook highlighting
-- 🎯 Semantic token colors
+- 🔍 Go to Definition support
 
-See [vscode-koi-extension/README.md](vscode-koi-extension/README.md) for details.
+**For more installation methods and troubleshooting:** See the [Editor Setup Guide](doc/00-editor-setup.md).
 
 ## GitHub Syntax Highlighting
 
@@ -530,8 +533,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 - **Documentation**: [doc/](doc/) - Comprehensive guides
 - **Quick Start**: [QUICKSTART.md](QUICKSTART.md) - 2-minute setup
+- **Editor Setup**: [doc/00-editor-setup.md](doc/00-editor-setup.md) - VS Code & Cursor
 - **Examples**: [examples/](examples/) - Working code samples
-- **VSCode Extension**: [vscode-koi-extension/](vscode-koi-extension/)
 - **AI Assistant Guide**: [CLAUDE.md](CLAUDE.md) - Architecture and patterns
 - **Syntax Highlighting**: [LINGUIST.md](LINGUIST.md) - GitHub support status
 

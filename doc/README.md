@@ -7,7 +7,9 @@ Welcome to the complete Koi language documentation. This guide will take you fro
 ## Documentation Structure
 
 ### Getting Started
-- **[00. Getting Started](00-getting-started.md)** - Installation, Hello World, and your first agent
+- **[00. Installation](00-installation.md)** - Install Koi on your system
+- **[00. Editor Setup](00-editor-setup.md)** - VS Code and Cursor extension setup
+- **[00. Getting Started](00-getting-started.md)** - Hello World and your first agent
 - **[01. Core Concepts](01-core-concepts.md)** - Roles, Agents, Teams, Skills, and the Koi philosophy
 
 ### Language Basics
@@ -38,6 +40,7 @@ Welcome to the complete Koi language documentation. This guide will take you fro
 
 **I want to...**
 - **...get started quickly** → [Getting Started](00-getting-started.md)
+- **...set up my editor** → [Editor Setup](00-editor-setup.md)
 - **...understand the philosophy** → [Core Concepts](01-core-concepts.md)
 - **...build my first agent** → [Agents Guide](03-agents.md)
 - **...use LLMs in my code** → [LLM Integration](06-llm-integration.md)
