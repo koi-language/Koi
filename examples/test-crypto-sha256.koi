@@ -1,0 +1,196 @@
+package "test.crypto.sha256"
+
+// Import crypto-js from npm for SHA256 hashing
+import "crypto-js"
+
+role SecurityAgent { can hash, can verify }
+
+Agent HashAgent : SecurityAgent {
+  on hashPassword(args: Json) {
+    console.log("=".repeat(60))
+    console.log("Crypto SHA256 Test - Password Hashing")
+    console.log("=".repeat(60))
+
+    const password = args.password
+    console.log("\nOriginal password:", password)
+
+    // Hash with SHA256 (using chained method syntax)
+    const hash = crypto_js.SHA256(password).toString()
+    console.log("SHA256 hash:", hash)
+
+    // Hash with SHA512 for comparison
+    const hash512 = crypto_js.SHA512(password).toString()
+    console.log("SHA512 hash:", hash512)
+
+    // Hash with MD5 (less secure, for demonstration)
+    const hashMD5 = crypto_js.MD5(password).toString()
+    console.log("MD5 hash:", hashMD5)
+
+    return {
+      password: password,
+      sha256: hash,
+      sha512: hash512,
+      md5: hashMD5
+    }
+  }
+
+  on verifyHash(args: Json) {
+    console.log("\n" + "=".repeat(60))
+    console.log("Hash Verification Test")
+    console.log("=".repeat(60))
+
+    const input = args.input
+    const expectedHash = args.expectedHash
+
+    console.log("\nInput:", input)
+    console.log("Expected hash:", expectedHash)
+
+    // Calculate hash (using chained method syntax)
+    const calculatedHash = crypto_js.SHA256(input).toString()
+    console.log("Calculated hash:", calculatedHash)
+
+    // Verify
+    const isValid = calculatedHash == expectedHash
+    console.log("Hash matches:", isValid)
+
+    return {
+      input: input,
+      expectedHash: expectedHash,
+      calculatedHash: calculatedHash,
+      isValid: isValid
+    }
+  }
+
+  on hashData(args: Json) {
+    console.log("\n" + "=".repeat(60))
+    console.log("Data Integrity Test - JSON Hashing")
+    console.log("=".repeat(60))
+
+    const data = args.data
+    console.log("\nOriginal data:", JSON.stringify(data))
+
+    // Convert to JSON string and hash (using chained method syntax)
+    const dataString = JSON.stringify(data)
+    const hash = crypto_js.SHA256(dataString).toString()
+    console.log("SHA256 hash:", hash)
+
+    // Simulate data tampering
+    const tamperedData = { name: data.name, age: 99, email: data.email }
+    const tamperedString = JSON.stringify(tamperedData)
+    const tamperedHash = crypto_js.SHA256(tamperedString).toString()
+    console.log("\nTampered data:", JSON.stringify(tamperedData))
+    console.log("Tampered hash:", tamperedHash)
+    console.log("Hashes match:", hash == tamperedHash)
+
+    return {
+      original: {
+        data: data,
+        hash: hash
+      },
+      tampered: {
+        data: tamperedData,
+        hash: tamperedHash
+      },
+      isCompromised: hash != tamperedHash
+    }
+  }
+
+  on compareAlgorithms(args: Json) {
+    console.log("\n" + "=".repeat(60))
+    console.log("Algorithm Comparison Test")
+    console.log("=".repeat(60))
+
+    const text = args.text
+    console.log("\nText to hash:", text)
+
+    // Hash with different algorithms (using chained method syntax)
+    const md5 = crypto_js.MD5(text).toString()
+    const sha1 = crypto_js.SHA1(text).toString()
+    const sha256 = crypto_js.SHA256(text).toString()
+    const sha512 = crypto_js.SHA512(text).toString()
+    const sha3 = crypto_js.SHA3(text).toString()
+
+    console.log("\nMD5 (32 chars):", md5)
+    console.log("SHA1 (40 chars):", sha1)
+    console.log("SHA256 (64 chars):", sha256)
+    console.log("SHA512 (128 chars):", sha512)
+    console.log("SHA3 (64 chars):", sha3)
+
+    console.log("\nHash lengths:")
+    console.log("  MD5:", md5.length, "characters")
+    console.log("  SHA1:", sha1.length, "characters")
+    console.log("  SHA256:", sha256.length, "characters")
+    console.log("  SHA512:", sha512.length, "characters")
+    console.log("  SHA3:", sha3.length, "characters")
+
+    return {
+      text: text,
+      hashes: {
+        md5: md5,
+        sha1: sha1,
+        sha256: sha256,
+        sha512: sha512,
+        sha3: sha3
+      }
+    }
+  }
+}
+
+Team HashTeam {
+  hasher = HashAgent
+}
+
+Agent Coordinator : SecurityAgent {
+  uses Team HashTeam
+
+  on runTests(args: Json) {
+    console.log("\n" + "█".repeat(60))
+    console.log("█" + " ".repeat(58) + "█")
+    console.log("█" + "  Crypto-JS SHA256 Integration Test Suite".padEnd(58) + "█")
+    console.log("█" + " ".repeat(58) + "█")
+    console.log("█".repeat(60))
+
+    // Test 1: Hash password
+    const result1 = await send peers.event("hashPassword").role(SecurityAgent).any()({
+      password: "MySecurePassword123!"
+    }) timeout 10s
+
+    // Test 2: Verify hash
+    const result2 = await send peers.event("verifyHash").role(SecurityAgent).any()({
+      input: "MySecurePassword123!",
+      expectedHash: result1.sha256
+    }) timeout 10s
+
+    // Test 3: Hash structured data
+    const result3 = await send peers.event("hashData").role(SecurityAgent).any()({
+      data: {
+        name: "Alice",
+        age: 30,
+        email: "alice@example.com"
+      }
+    }) timeout 10s
+
+    // Test 4: Compare algorithms
+    const result4 = await send peers.event("compareAlgorithms").role(SecurityAgent).any()({
+      text: "The quick brown fox jumps over the lazy dog"
+    }) timeout 10s
+
+    console.log("\n" + "█".repeat(60))
+    console.log("█" + " ".repeat(58) + "█")
+    console.log("█" + "  All Crypto Tests Completed Successfully!".padEnd(58) + "█")
+    console.log("█" + " ".repeat(58) + "█")
+    console.log("█".repeat(60))
+
+    return {
+      success: true,
+      tests: {
+        passwordHashing: result1,
+        hashVerification: result2,
+        dataIntegrity: result3,
+        algorithmComparison: result4
+      }
+    }
+  }
+}
+
+run Coordinator.runTests({})

@@ -1,0 +1,41 @@
+// Test delegation with explicit data passing
+package "test.delegation"
+
+role Worker { can execute }
+
+// Specialist that saves users
+Agent Saver : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini" }
+
+  on saveUser(args: Json) {
+    playbook """
+    Save a user to registry with key "user:${args.id}".
+    User data: name="${args.name}", age=${args.age}
+
+    Return: { "saved": true, "id": "${args.id}", "name": "${args.name}" }
+    """
+  }
+}
+
+// Team containing the saver
+Team SaverTeam {
+  saver = Saver
+}
+
+// Orchestrator that delegates
+Agent Orchestrator : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini" }
+  uses Team SaverTeam
+
+  on start(args: Json) {
+    playbook """
+    Delegate the task of saving a user named "TestUser" with ID "123" and age 25.
+
+    CRITICAL: Pass data: { "id": "123", "name": "TestUser", "age": 25 }
+
+    Return the result from the delegation.
+    """
+  }
+}
+
+run Orchestrator.start({})

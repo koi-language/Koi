@@ -1,0 +1,70 @@
+// ============================================================
+// Koi — MCP (Model Context Protocol) Example
+// Demonstrates using MCP addresses to reference remote agents
+// ============================================================
+
+package "demo.koi.mcp"
+
+role Worker { can execute }
+role Lead   { can delegate }
+
+// Local agent
+Agent LocalProcessor : Worker {
+  on process(args: Json) {
+    const data = args.data
+    const processed = "LOCAL: " + data
+    return { result: processed, source: "local" }
+  }
+}
+
+// Team with both local and remote (MCP) agents
+Team HybridTeam {
+  // Regular local agent
+  local = LocalProcessor
+
+  // Remote agents via MCP addresses
+  // Format: mcp://server/path
+  remote1 = mcp://agent.local/processor
+  remote2 = mcp://service.local/analyzer
+}
+
+// Orchestrator that uses both local and remote agents
+Agent Orchestrator : Lead {
+  uses Team HybridTeam
+
+  on start(args: Json) {
+    const data = args.data
+
+    // This will try local first, then MCP agents
+    const result =
+      await send peers.event("process").role(Worker).any()({ data: data }) timeout 10s
+
+    return {
+      success: true,
+      result: result
+    }
+  }
+
+  on processAll(args: Json) {
+    const data = args.data
+
+    // Process with ALL agents (local + MCP)
+    const results =
+      await send peers.event("process").role(Worker).all()({ data: data }) timeout 15s
+
+    return {
+      success: true,
+      count: 3,
+      results: results
+    }
+  }
+}
+
+// Example with MCP skill reference
+Team DistributedTeam {
+  orchestrator = Orchestrator
+  // Reference a remote skill
+  sentiment = mcp://skills.local/sentiment-analysis
+}
+
+run Orchestrator.start({ data: "Hello from Koi with MCP support!" })

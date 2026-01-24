@@ -1,0 +1,24 @@
+// Minimal test
+package "test"
+
+role Worker { can execute }
+
+Agent Test : Worker {
+on test(args: Json) {
+return { ok: true }
+}
+}
+
+Team T {
+t = Test
+}
+
+Agent Orch : Worker {
+uses Team T
+on start(args: Json) {
+const r = await send peers.event("test").role(Worker).any()({}) timeout 2s
+return r
+}
+}
+
+run Orch.start({})

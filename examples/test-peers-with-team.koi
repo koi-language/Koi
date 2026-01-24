@@ -1,0 +1,59 @@
+package "test.peers.team"
+
+role Worker { can work }
+
+Agent WorkerA : Worker {
+  on work(args: Json) {
+    return { from: "WorkerA", data: args }
+  }
+}
+
+Agent WorkerB : Worker {
+  on work(args: Json) {
+    return { from: "WorkerB", data: args }
+  }
+}
+
+Team TeamA {
+  worker = WorkerA
+}
+
+Team TeamB {
+  worker = WorkerB
+}
+
+Agent Coordinator : Worker {
+  uses Team TeamA, TeamB
+
+  on coordinate(args: Json) {
+    // Test 1: Send to all teams via common router
+    console.log("Test 1: Send to all teams (peers.event)")
+    const resultAll = await send peers.event("work").role(Worker).any()({
+      message: "to all teams"
+    }) timeout 10s
+    console.log("Result from all:", JSON.stringify(resultAll))
+
+    // Test 2: Send only to TeamA
+    console.log("\nTest 2: Send to TeamA only (peers(TeamA).event)")
+    const resultTeamA = await send peers(TeamA).event("work").role(Worker).any()({
+      message: "to TeamA only"
+    }) timeout 10s
+    console.log("Result from TeamA:", JSON.stringify(resultTeamA))
+
+    // Test 3: Send only to TeamB
+    console.log("\nTest 3: Send to TeamB only (peers(TeamB).event)")
+    const resultTeamB = await send peers(TeamB).event("work").role(Worker).any()({
+      message: "to TeamB only"
+    }) timeout 10s
+    console.log("Result from TeamB:", JSON.stringify(resultTeamB))
+
+    return {
+      success: true,
+      allTeams: resultAll,
+      teamA: resultTeamA,
+      teamB: resultTeamB
+    }
+  }
+}
+
+run Coordinator.coordinate({ test: true })

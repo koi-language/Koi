@@ -1,0 +1,29 @@
+// Cache Test Example
+package "test.cache"
+
+role Worker { can execute }
+
+Agent TextTranslator : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini" }
+
+  on translate(args: Json) {
+    playbook """
+    Translate this text to the target language: ${args.text}
+    Target language: ${args.language}
+    Return JSON with translated text.
+    """
+  }
+}
+
+Agent WordAnalyzer : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini" }
+
+  on analyze(args: Json) {
+    playbook """
+    Analyze this text and count words: ${args.text}
+    Return JSON with word count and analysis.
+    """
+  }
+}
+
+run TextTranslator.translate({ text: "hello", language: "spanish" })

@@ -1,0 +1,89 @@
+// ============================================================
+// New Import System Test
+// Tests the new simplified import syntax
+// ============================================================
+
+package "demo.koi.new.import"
+
+// New import syntax - imports everything (Skills, Agents, Roles, Teams)
+import "./skills/math-operations.koi"
+import "@koi-lang/common-skills"
+
+role Worker { can work }
+
+// Agent that uses imported skills from both local and npm package
+Agent DataProcessor : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini", temperature: 0.1, max_tokens: 300 }
+  // Comma-separated syntax (cleaner!)
+  uses Skill MathOperations, DataValidation, DataTransformation
+
+  on process(args: Json) {
+    playbook """
+    Process the request: ${JSON.stringify(args)}
+
+    Use the available tools (math, validation, transformation) to complete the task.
+    Return the result as JSON.
+    """
+  }
+}
+
+Team WorkerTeam {
+  processor = DataProcessor
+  // Also use the imported EmailValidator agent
+  emailValidator = EmailValidator
+}
+
+// Demo runner
+Agent DemoRunner : Worker {
+  uses Team WorkerTeam
+
+  on runTest(args: Json) {
+    console.log("╔════════════════════════════════════════════╗")
+    console.log("║  New Import System Test                    ║")
+    console.log("║  Local files + npm packages                ║")
+    console.log("╚════════════════════════════════════════════╝\n")
+
+    // Test 1: Use local skill (math)
+    console.log("📋 Test 1: Math operation from local skill")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    const mathResult =
+      await send peers.event("process").role(Worker).any()({
+        operation: "add",
+        a: 15,
+        b: 27
+      }) timeout 10s
+
+    console.log("Result:", JSON.stringify(mathResult, null, 2))
+
+    // Test 2: Use npm package skill (validation)
+    console.log("\n📋 Test 2: Email validation from npm package")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    const validationResult =
+      await send peers.event("process").role(Worker).any()({
+        operation: "validateEmail",
+        email: "test@example.com"
+      }) timeout 10s
+
+    console.log("Result:", JSON.stringify(validationResult, null, 2))
+
+    // Test 3: Use imported agent directly
+    console.log("\n📋 Test 3: Using imported EmailValidator agent")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    const agentResult =
+      await send peers.event("validate").role(Validator).any()({
+        email: "invalid-email"
+      }) timeout 10s
+
+    console.log("Result:", JSON.stringify(agentResult, null, 2))
+
+    return {
+      success: true,
+      tests_completed: 3
+    }
+  }
+}
+
+run DemoRunner.runTest({})

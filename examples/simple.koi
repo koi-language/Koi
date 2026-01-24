@@ -1,0 +1,48 @@
+// ============================================================
+// Koi — Simple Example
+// Minimal example showing agent communication with procedural code
+// ============================================================
+
+package "demo.koi.simple"
+
+role Worker { can execute }
+role Lead   { can delegate }
+
+// Agent with procedural code only (no playbook)
+Agent Greeter : Worker {
+  on greet(args: Json) {
+    const name = args.name
+    return { message: "Hello, " + name + "!" }
+  }
+}
+
+// Agent with procedural code only (no playbook)
+Agent Processor : Worker {
+  on process(args: Json) {
+    const msg = args.message
+    const upper = "PROCESSED: " + msg
+    return { result: upper }
+  }
+}
+
+Team SimpleTeam {
+  greeter = Greeter
+  processor = Processor
+}
+
+// Orchestrator with procedural code
+Agent Orchestrator : Lead {
+  uses Team SimpleTeam
+
+  on start(args: Json) {
+    const greeting =
+      await send peers.event("greet").role(Worker).any()({ name: "Koi" }) timeout 5s
+
+    const processed =
+      await send peers.event("process").role(Worker).any()({ message: greeting.message }) timeout 5s
+
+    return processed
+  }
+}
+
+run Orchestrator.start({})

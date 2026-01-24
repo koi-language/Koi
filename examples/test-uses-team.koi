@@ -1,0 +1,31 @@
+package "test.uses.team"
+
+role Worker { can execute }
+role Manager { can manage }
+
+Agent SimpleWorker : Worker {
+  on doWork(args: Json) {
+    playbook """
+    Do some work: ${args.task}
+    Return JSON: { "result": "work done" }
+    """
+  }
+}
+
+Team SimpleTeam {
+  worker = SimpleWorker
+}
+
+Agent TeamUser : Manager {
+  uses Team SimpleTeam
+
+  on requestWork(args: Json) {
+    playbook """
+    Request work from team: ${args.request}
+    Return JSON with actions:
+    { "actions": [{ "intent": "do work", "data": { "task": "${args.request}" } }] }
+    """
+  }
+}
+
+run TeamUser.requestWork({ request: "process data" })

@@ -1,0 +1,258 @@
+package "test.multi.team.routing"
+
+// Test: Multi-team routing with peers() and peers(TeamName)
+// This test validates that:
+// 1. peers.event() broadcasts to all teams
+// 2. peers(TeamName).event() sends only to specific team
+// 3. Multiple teams can coexist and be addressed independently
+
+role Worker { can work, can process }
+
+// Team A workers
+Agent WorkerA1 : Worker {
+  on work(args: Json) {
+    return {
+      from: "WorkerA1",
+      team: "TeamA",
+      data: args
+    }
+  }
+
+  on process(args: Json) {
+    return {
+      from: "WorkerA1",
+      team: "TeamA",
+      operation: "process",
+      data: args
+    }
+  }
+}
+
+Agent WorkerA2 : Worker {
+  on work(args: Json) {
+    return {
+      from: "WorkerA2",
+      team: "TeamA",
+      data: args
+    }
+  }
+
+  on process(args: Json) {
+    return {
+      from: "WorkerA2",
+      team: "TeamA",
+      operation: "process",
+      data: args
+    }
+  }
+}
+
+// Team B workers
+Agent WorkerB1 : Worker {
+  on work(args: Json) {
+    return {
+      from: "WorkerB1",
+      team: "TeamB",
+      data: args
+    }
+  }
+
+  on process(args: Json) {
+    return {
+      from: "WorkerB1",
+      team: "TeamB",
+      operation: "process",
+      data: args
+    }
+  }
+}
+
+Agent WorkerB2 : Worker {
+  on work(args: Json) {
+    return {
+      from: "WorkerB2",
+      team: "TeamB",
+      data: args
+    }
+  }
+
+  on process(args: Json) {
+    return {
+      from: "WorkerB2",
+      team: "TeamB",
+      operation: "process",
+      data: args
+    }
+  }
+}
+
+// Team C workers
+Agent WorkerC1 : Worker {
+  on work(args: Json) {
+    return {
+      from: "WorkerC1",
+      team: "TeamC",
+      data: args
+    }
+  }
+
+  on process(args: Json) {
+    return {
+      from: "WorkerC1",
+      team: "TeamC",
+      operation: "process",
+      data: args
+    }
+  }
+}
+
+// Define three teams
+Team TeamA {
+  worker1 = WorkerA1
+  worker2 = WorkerA2
+}
+
+Team TeamB {
+  worker1 = WorkerB1
+  worker2 = WorkerB2
+}
+
+Team TeamC {
+  worker1 = WorkerC1
+}
+
+// Coordinator that uses all three teams
+Agent TestCoordinator : Worker {
+  uses Team TeamA, TeamB, TeamC
+
+  on runTests(args: Json) {
+    console.log("=".repeat(60))
+    console.log("Multi-Team Routing Test Suite")
+    console.log("=".repeat(60))
+
+    // Test 1: Broadcast to all teams (peers.event)
+    console.log("\n[TEST 1] Broadcast to all teams with peers.event()")
+    console.log("-".repeat(60))
+    const result1 = await send peers.event("work").role(Worker).any()({
+      test: "broadcast",
+      message: "Should reach any team"
+    }) timeout 10s
+
+    console.log("Result:", JSON.stringify(result1, null, 2))
+    const test1Pass = result1 && result1.team
+    if (test1Pass) {
+      console.log("✓ TEST 1 PASSED: Received response from", result1.team)
+    } else {
+      console.log("✗ TEST 1 FAILED: No response received")
+    }
+
+    // Test 2: Send only to TeamA
+    console.log("\n[TEST 2] Send to TeamA only with peers(TeamA).event()")
+    console.log("-".repeat(60))
+    const result2 = await send peers(TeamA).event("work").role(Worker).any()({
+      test: "teamA",
+      message: "Should only reach TeamA"
+    }) timeout 10s
+
+    console.log("Result:", JSON.stringify(result2, null, 2))
+    const test2Pass = result2 && result2.team == "TeamA"
+    if (test2Pass) {
+      console.log("✓ TEST 2 PASSED: Correctly routed to TeamA")
+    } else {
+      console.log("✗ TEST 2 FAILED: Expected team=TeamA, got", result2.team)
+    }
+
+    // Test 3: Send only to TeamB
+    console.log("\n[TEST 3] Send to TeamB only with peers(TeamB).event()")
+    console.log("-".repeat(60))
+    const result3 = await send peers(TeamB).event("work").role(Worker).any()({
+      test: "teamB",
+      message: "Should only reach TeamB"
+    }) timeout 10s
+
+    console.log("Result:", JSON.stringify(result3, null, 2))
+    const test3Pass = result3 && result3.team == "TeamB"
+    if (test3Pass) {
+      console.log("✓ TEST 3 PASSED: Correctly routed to TeamB")
+    } else {
+      console.log("✗ TEST 3 FAILED: Expected team=TeamB, got", result3.team)
+    }
+
+    // Test 4: Send only to TeamC
+    console.log("\n[TEST 4] Send to TeamC only with peers(TeamC).event()")
+    console.log("-".repeat(60))
+    const result4 = await send peers(TeamC).event("work").role(Worker).any()({
+      test: "teamC",
+      message: "Should only reach TeamC"
+    }) timeout 10s
+
+    console.log("Result:", JSON.stringify(result4, null, 2))
+    const test4Pass = result4 && result4.team == "TeamC"
+    if (test4Pass) {
+      console.log("✓ TEST 4 PASSED: Correctly routed to TeamC")
+    } else {
+      console.log("✗ TEST 4 FAILED: Expected team=TeamC, got", result4.team)
+    }
+
+    // Test 5: Different event to specific team
+    console.log("\n[TEST 5] Send 'process' event to TeamA only")
+    console.log("-".repeat(60))
+    const result5 = await send peers(TeamA).event("process").role(Worker).any()({
+      test: "process",
+      value: 42
+    }) timeout 10s
+
+    console.log("Result:", JSON.stringify(result5, null, 2))
+    const test5Pass = result5 && result5.team == "TeamA" && result5.operation == "process"
+    if (test5Pass) {
+      console.log("✓ TEST 5 PASSED: Process event routed to TeamA")
+    } else {
+      console.log("✗ TEST 5 FAILED: Expected TeamA process event")
+    }
+
+    // Test 6: Verify isolation - TeamB should not receive TeamA messages
+    console.log("\n[TEST 6] Verify team isolation")
+    console.log("-".repeat(60))
+    const resultA = await send peers(TeamA).event("work").role(Worker).any()({
+      target: "TeamA"
+    }) timeout 10s
+    const resultB = await send peers(TeamB).event("work").role(Worker).any()({
+      target: "TeamB"
+    }) timeout 10s
+
+    console.log("TeamA result:", JSON.stringify(resultA, null, 2))
+    console.log("TeamB result:", JSON.stringify(resultB, null, 2))
+    const test6Pass = resultA.team == "TeamA" && resultB.team == "TeamB"
+    if (test6Pass) {
+      console.log("✓ TEST 6 PASSED: Teams are properly isolated")
+    } else {
+      console.log("✗ TEST 6 FAILED: Team isolation failed")
+    }
+
+    // Summary
+    console.log("\n" + "=".repeat(60))
+    console.log("Test Summary")
+    console.log("=".repeat(60))
+    const allPassed = test1Pass && test2Pass && test3Pass && test4Pass && test5Pass && test6Pass
+
+    if (allPassed) {
+      console.log("\n✓ ALL 6 TESTS PASSED!")
+    } else {
+      console.log("\n✗ SOME TESTS FAILED - See results above")
+    }
+
+    return {
+      success: allPassed,
+      results: {
+        test1: test1Pass,
+        test2: test2Pass,
+        test3: test3Pass,
+        test4: test4Pass,
+        test5: test5Pass,
+        test6: test6Pass
+      }
+    }
+  }
+}
+
+run TestCoordinator.runTests({})

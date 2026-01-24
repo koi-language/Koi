@@ -1,0 +1,244 @@
+// ============================================================
+// Task Chaining Demo
+// Demonstrates automatic output→input chaining between tasks
+// ============================================================
+
+package "demo.koi.chaining"
+
+role Worker { can execute }
+role Assistant { can help }
+
+// ============================================================
+// Specialized Worker Agents
+// ============================================================
+
+Agent FrenchTranslator : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini", temperature: 0.2, max_tokens: 200 }
+
+  on translate(args: Json) {
+    playbook """
+    You are a specialized worker agent. Do NOT return actions, only direct results.
+
+    Translate the following text to French: ${JSON.stringify(args.text)}
+
+    Return ONLY valid JSON (NO actions field):
+    {
+      "translated": "text in French",
+      "original": "original text",
+      "language": "french"
+    }
+    """
+  }
+}
+
+Agent WordCounter : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini", temperature: 0.1, max_tokens: 200 }
+
+  on count(args: Json) {
+    playbook """
+    You are a specialized worker agent. Do NOT return actions, only direct results.
+
+    Count the number of words in this text: ${JSON.stringify(args.text)}
+
+    Return ONLY valid JSON (NO actions field):
+    {
+      "wordCount": <number>,
+      "text": "the text that was counted"
+    }
+    """
+  }
+}
+
+Agent TextFormatter : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini", temperature: 0.1, max_tokens: 200 }
+
+  on format(args: Json) {
+    playbook """
+    You are a specialized worker agent. Do NOT return actions, only direct results.
+
+    Convert this text to uppercase: ${JSON.stringify(args.text)}
+
+    Return ONLY valid JSON (NO actions field):
+    {
+      "formatted": "TEXT IN UPPERCASE",
+      "original": "original text"
+    }
+    """
+  }
+}
+
+Agent CharacterCounter : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini", temperature: 0.1, max_tokens: 200 }
+
+  on countChars(args: Json) {
+    playbook """
+    You are a specialized worker agent. Do NOT return actions, only direct results.
+
+    Count the number of characters in this text: ${JSON.stringify(args.text)}
+
+    Return ONLY valid JSON (NO actions field):
+    {
+      "charCount": <number>,
+      "text": "the text that was counted"
+    }
+    """
+  }
+}
+
+Agent DataValidator : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini", temperature: 0.1, max_tokens: 200 }
+
+  on validate(args: Json) {
+    playbook """
+    You are a specialized worker agent. Do NOT return actions, only direct results.
+
+    Validate this email: ${JSON.stringify(args.email)}
+
+    Check if it's a valid email format.
+
+    Return ONLY valid JSON (NO actions field):
+    {
+      "valid": true/false,
+      "email": "the email",
+      "message": "validation message"
+    }
+    """
+  }
+}
+
+// ============================================================
+// Regular Assistant - NO special orchestrator knowledge
+// ============================================================
+
+Agent TaskAssistant : Assistant {
+  llm default = { provider: "openai", model: "gpt-4o-mini", temperature: 0.3, max_tokens: 800 }
+
+  on helpUser(args: Json) {
+    playbook """
+    User request: ${args.request}
+
+    Help accomplish this request. If it requires multiple steps:
+    1. Break it down into sequential tasks
+    2. Chain outputs: use previous results as inputs for next tasks
+
+    The system will automatically:
+    - Execute each task
+    - Pass outputs to next task
+    - Route to appropriate team members
+
+    Return your plan or result as JSON.
+    """
+  }
+}
+
+// ============================================================
+// Team
+// ============================================================
+
+Team AssistantTeam {
+  taskAssistant = TaskAssistant
+}
+
+// ============================================================
+// Demo Runner
+// ============================================================
+
+Agent DemoRunner : Assistant {
+  uses Team AssistantTeam
+
+  on runDemo(args: Json) {
+    console.log("╔════════════════════════════════════════════╗")
+    console.log("║  Task Chaining Demo                        ║")
+    console.log("║  Output → Input Automatic Chaining         ║")
+    console.log("╚════════════════════════════════════════════╝\n")
+
+    // ============================================================
+    // Test 1: Translate → Count Words
+    // ============================================================
+    console.log("📋 Test 1: Translate to French → Count Words")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    console.log('Request: "Translate Hello world to French and then count the words"\n')
+
+    const test1 = await send peers.event("helpUser").role(Assistant).any()({
+      request: "Translate 'Hello world' to French and then count the words in the translation"
+    }) timeout 30s
+
+    console.log("✅ Result:")
+    console.log(JSON.stringify(test1, null, 2))
+    console.log("\nExpected flow:")
+    console.log("  1. FrenchTranslator → { translated: 'Bonjour monde' }")
+    console.log("  2. WordCounter(previousResult.translated) → { wordCount: 2 }")
+    console.log("\n")
+
+    // ============================================================
+    // Test 2: Format → Count Characters
+    // ============================================================
+    console.log("📋 Test 2: Format to Uppercase → Count Characters")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    console.log('Request: "Format hello to uppercase and count characters"\n')
+
+    const test2 = await send peers.event("helpUser").role(Assistant).any()({
+      request: "Format the word hello to uppercase and then count the characters"
+    }) timeout 30s
+
+    console.log("✅ Result:")
+    console.log(JSON.stringify(test2, null, 2))
+    console.log("\nExpected flow:")
+    console.log("  1. TextFormatter → { formatted: 'HELLO' }")
+    console.log("  2. CharacterCounter(previousResult.formatted) → { charCount: 5 }")
+    console.log("\n")
+
+    // ============================================================
+    // Test 3: Chain of 3 Tasks
+    // ============================================================
+    console.log("📋 Test 3: Three-Step Chain")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    console.log('Request: "Validate email, format it, count words"\n')
+
+    const test3 = await send peers.event("helpUser").role(Assistant).any()({
+      request: "Validate the email user@test.com, then format it to uppercase, then count how many words it has"
+    }) timeout 30s
+
+    console.log("✅ Result:")
+    console.log(JSON.stringify(test3, null, 2))
+    console.log("\nExpected flow:")
+    console.log("  1. DataValidator → { valid: true, email: 'user@test.com' }")
+    console.log("  2. TextFormatter(previousResult.email) → { formatted: 'USER@TEST.COM' }")
+    console.log("  3. WordCounter(previousResult.formatted) → { wordCount: 1 }")
+    console.log("\n")
+
+    // ============================================================
+    // Test 4: Complex Original Request
+    // ============================================================
+    console.log("📋 Test 4: Your Original Example")
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    console.log('Request: "Traduce al frances y luego cuenta el numero de palabras"\n')
+
+    const test4 = await send peers.event("helpUser").role(Assistant).any()({
+      request: "Traduce 'artificial intelligence' al frances y luego cuenta el numero de palabras"
+    }) timeout 30s
+
+    console.log("✅ Result:")
+    console.log(JSON.stringify(test4, null, 2))
+    console.log("\nExpected flow:")
+    console.log("  1. FrenchTranslator → { translated: 'intelligence artificielle' }")
+    console.log("  2. WordCounter(previousResult.translated) → { wordCount: 2 }")
+    console.log("\n")
+
+    console.log("✅ All chaining tests completed!")
+    console.log("")
+    console.log("🔑 Key Points:")
+    console.log("  - LLM creates plan with chained actions")
+    console.log("  - Each action references previous results: $-{previousResult.field}")
+    console.log("  - Runtime resolves references before executing")
+    console.log("  - Output of action N becomes input of action N+1")
+    console.log("  - NO manual wiring needed!")
+
+    return {
+      success: true,
+      tests_completed: 4
+    }
+  }
+}
+
+run DemoRunner.runDemo({})

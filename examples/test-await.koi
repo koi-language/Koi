@@ -1,0 +1,22 @@
+package "test"
+
+role Worker { can execute }
+
+Agent A : Worker {
+on test(args: Json) {
+const x = 5
+return { x: x }
+}
+}
+
+Team T {
+a = A
+}
+
+Agent B : Worker {
+uses Team T
+on start(args: Json) {
+const result = await send peers.event("test").role(Worker).any()({}) timeout 2s
+return result
+}
+}

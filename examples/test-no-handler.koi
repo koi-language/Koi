@@ -1,0 +1,35 @@
+// Test: Error when no agent can handle an event
+
+package "test.no.handler"
+
+role Worker { can execute }
+
+Agent SimpleWorker : Worker {
+  on doWork(args: Json) {
+    playbook """
+    Do some work
+    Return JSON: { "result": "done" }
+    """
+  }
+}
+
+Team SimpleTeam {
+  worker = SimpleWorker
+}
+
+Agent Requester : Worker {
+  uses Team SimpleTeam
+
+  on testNoHandler(args: Json) {
+    console.log("Testing error when no agent can handle event...")
+
+    // Try to send an event that no agent in the team can handle
+    const result = await send peers.event("nonExistentEvent").any()({
+      data: "test"
+    }) timeout 5s
+
+    return result
+  }
+}
+
+run Requester.testNoHandler({})
