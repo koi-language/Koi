@@ -55,11 +55,39 @@ See [doc/07-routing.md](doc/07-routing.md) and [doc/08-task-chaining.md](doc/08-
 
 ## Installation
 
-### Local Development
+### Quick Install (Recommended)
+
+Install KOI with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/koi-language/koi/main/install.sh | bash
+```
+
+This will:
+- ✅ Check for Node.js >= 18.0.0 and npm
+- ✅ Install KOI to `~/.koi`
+- ✅ Add the `koi` command to your PATH
+- ✅ Build the grammar and set everything up
+
+After installation completes, restart your shell or run:
+```bash
+source ~/.bashrc  # or ~/.zshrc, ~/.bash_profile, etc.
+```
+
+Then verify the installation:
+```bash
+koi --version
+```
+
+### Manual Installation
+
+#### Local Development
 
 For working on Koi itself:
 
 ```bash
+git clone https://github.com/koi-language/koi.git
+cd koi
 npm install
 npm run build:grammar
 ```
@@ -82,17 +110,15 @@ koi run examples/hello-world.koi
 
 This allows you to modify the runtime and test changes immediately without `npm install -g` each time.
 
-### Global Installation
+#### Global Installation (Alternative)
 
-Install Koi as a global command:
+If you prefer npm, install Koi as a global command:
 
 ```bash
+# From local clone
 npm install -g .
-```
 
-Or from npm (when published):
-
-```bash
+# Or from npm (when published)
 npm install -g koi-lang
 ```
 
@@ -101,13 +127,19 @@ After global installation, you can use `koi` directly:
 ```bash
 koi run examples/hello-world.koi
 koi compile examples/simple.koi
-koi init my-project
 koi version
 koi help
 ```
 
-### Uninstall
+#### Uninstall
 
+For quick install method:
+```bash
+rm -rf ~/.koi
+# Remove PATH entry from your shell config (~/.bashrc, ~/.zshrc, etc.)
+```
+
+For npm install:
 ```bash
 npm uninstall -g koi-lang
 ```
