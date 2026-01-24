@@ -2,6 +2,11 @@
 
 **Agent-first language. Calm orchestration.** 🌊
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![GitHub](https://img.shields.io/badge/GitHub-koi--language%2Fkoi-6495ED?logo=github)](https://github.com/koi-language/koi)
+[![VSCode Extension](https://img.shields.io/badge/VSCode-Extension-007ACC?logo=visualstudiocode)](vscode-koi-extension/)
+[![Syntax Highlighting](https://img.shields.io/badge/GitHub-Syntax_Highlighting-6495ED?logo=github)](LINGUIST.md)
+
 Koi is a multi-agent orchestration language with role-based routing.
 
 > **🚀 New to Koi?** Check out the [Quick Start Guide](QUICKSTART.md) for a 2-minute setup!
@@ -126,6 +131,31 @@ ln -s "$(pwd)" ~/.cursor/extensions/koi-lang  # Cursor
 - 🎯 Semantic token colors
 
 See [vscode-koi-extension/README.md](vscode-koi-extension/README.md) for details.
+
+## GitHub Syntax Highlighting
+
+KOI code blocks in markdown files (README, Issues, PRs) automatically get syntax highlighting on GitHub!
+
+````markdown
+```koi
+Agent Hello : Worker {
+  on greet(args: Json) {
+    console.log("Hello from KOI!")
+  }
+}
+```
+````
+
+**Status:**
+- ✅ **Current**: Using JavaScript highlighting (very similar syntax)
+- 🚀 **Soon**: Native KOI highlighting (PR submitted to [github/linguist](https://github.com/github/linguist))
+
+Once the PR is merged, GitHub will recognize `.koi` files with:
+- 🎨 Cornflower Blue (#6495ED) in language statistics
+- ✨ Full syntax highlighting for code blocks
+- 📊 Language detection in repositories
+
+See [LINGUIST.md](LINGUIST.md) for technical details and contribution status.
 
 ## Usage
 
@@ -514,9 +544,37 @@ Comprehensive documentation is available in the [doc/](doc/) directory:
   - [X] Execution tracking and summaries
 - [X] TypeScript/JavaScript import support
 - [X] Unit testing with Jest
+- [X] VSCode/Cursor extension with syntax highlighting
+- [X] GitHub syntax highlighting support
 - [ ] Skills registry and marketplace
 - [ ] Visual debugging
 - [ ] Hot reload in development
+
+## Contributing
+
+Contributions are welcome! Here are some ways you can help:
+
+- 🐛 Report bugs and issues
+- 💡 Suggest new features or improvements
+- 📝 Improve documentation
+- 🎨 Help with GitHub Linguist PR (see [LINGUIST.md](LINGUIST.md))
+- 🔧 Submit pull requests
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Resources
+
+- **Documentation**: [doc/](doc/) - Comprehensive guides
+- **Quick Start**: [QUICKSTART.md](QUICKSTART.md) - 2-minute setup
+- **Examples**: [examples/](examples/) - Working code samples
+- **VSCode Extension**: [vscode-koi-extension/](vscode-koi-extension/)
+- **AI Assistant Guide**: [CLAUDE.md](CLAUDE.md) - Architecture and patterns
+- **Syntax Highlighting**: [LINGUIST.md](LINGUIST.md) - GitHub support status
+
+## Community
+
+- **Issues**: [github.com/koi-language/koi/issues](https://github.com/koi-language/koi/issues)
+- **Discussions**: [github.com/koi-language/koi/discussions](https://github.com/koi-language/koi/discussions)
 
 ## License
 
