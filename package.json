@@ -44,12 +44,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/koi-language/koi.git"
+    "url": "https://github.com/koi-language/Koi.git"
   },
   "bugs": {
-    "url": "https://github.com/koi-language/koi/issues"
+    "url": "https://github.com/koi-language/Koi/issues"
   },
-  "homepage": "https://github.com/koi-language/koi#readme",
+  "homepage": "https://github.com/koi-language/Koi#readme",
   "engines": {
     "node": ">=18.0.0"
   },

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # KOI Language Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/koi-language/koi/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/koi-language/Koi/main/install.sh | bash
 #
 set -e
 
@@ -14,7 +14,7 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
-REPO_URL="https://github.com/koi-language/koi.git"
+REPO_URL="https://github.com/koi-language/Koi.git"
 INSTALL_DIR="$HOME/.koi"
 BIN_DIR="$HOME/.local/bin"
 MIN_NODE_VERSION="18.0.0"
@@ -259,8 +259,8 @@ print_next_steps() {
     echo "  koi --help              Show help"
     echo ""
     echo -e "${CYAN}Resources:${NC}"
-    echo "  Repository: https://github.com/koi-language/koi"
-    echo "  Issues:     https://github.com/koi-language/koi/issues"
+    echo "  Repository: https://github.com/koi-language/Koi"
+    echo "  Issues:     https://github.com/koi-language/Koi/issues"
     echo ""
 }
 

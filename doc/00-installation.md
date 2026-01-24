@@ -5,7 +5,7 @@
 Install KOI with a single command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/koi-language/koi/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/koi-language/Koi/main/install.sh | bash
 ```
 
 ### What it does:
@@ -97,7 +97,7 @@ If you prefer to install manually:
 
 ```bash
 # Clone repository
-git clone https://github.com/koi-language/koi.git ~/.koi
+git clone https://github.com/koi-language/Koi.git ~/.koi
 cd ~/.koi
 
 # Install dependencies
@@ -173,7 +173,7 @@ npm run build:grammar
 Or simply run the installer again (it will remove the old installation):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/koi-language/koi/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/koi-language/Koi/main/install.sh | bash
 ```
 
 ## Troubleshooting
@@ -255,13 +255,13 @@ npm config set https-proxy http://proxy.company.com:8080
 git config --global http.proxy http://proxy.company.com:8080
 
 # Then run installer
-curl -fsSL https://raw.githubusercontent.com/koi-language/koi/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/koi-language/Koi/main/install.sh | bash
 ```
 
 ## Support
 
-- **Issues**: [github.com/koi-language/koi/issues](https://github.com/koi-language/koi/issues)
-- **Discussions**: [github.com/koi-language/koi/discussions](https://github.com/koi-language/koi/discussions)
+- **Issues**: [github.com/koi-language/Koi/issues](https://github.com/koi-language/Koi/issues)
+- **Discussions**: [github.com/koi-language/Koi/discussions](https://github.com/koi-language/Koi/discussions)
 
 ## Alternative Installation Methods
 

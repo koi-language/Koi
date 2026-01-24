@@ -449,7 +449,7 @@ When making changes to KOI:
 
 ## Resources
 
-- **Repository:** https://github.com/koi-language/koi
+- **Repository:** https://github.com/koi-language/Koi
 - **Documentation:** `doc/` directory
 - **Examples:** `examples/` directory
 - **VSCode Extension:** `vscode-koi-extension/`
