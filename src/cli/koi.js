@@ -490,6 +490,7 @@ package "${projectName}"
 
 role Worker { can execute }
 
+// Agent with LLM playbook - generates creative greetings
 Agent Greeter : Worker {
   llm default = { provider: "openai", model: "gpt-4o-mini" }
 
@@ -503,8 +504,7 @@ Agent Greeter : Worker {
     - Add a motivational message or fun fact
     - Be brief (2-3 sentences)
 
-    Respond in JSON format:
-    { "greeting": "your greeting here", "emoji": "an appropriate emoji" }
+    Return JSON: { "greeting": "your greeting here", "emoji": "an appropriate emoji" }
     """
   }
 }
