@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="koi.png" alt="KOI Language Logo" width="400"/>
+</div>
+
 # Koi
 
 **Agent-first language. Calm orchestration.** 🌊
