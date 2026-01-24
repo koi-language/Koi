@@ -22,7 +22,7 @@ For complete installation instructions, see [Installation Guide](00-installation
 **Quick install:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/koi-language/koi/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/koi-language/Koi/main/install.sh | bash
 ```
 
 After installation, verify it works:

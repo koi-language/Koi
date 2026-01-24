@@ -7,11 +7,17 @@
 **Agent-first language. Calm orchestration.** 🌊
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![GitHub](https://img.shields.io/badge/GitHub-koi--language%2Fkoi-6495ED?logo=github)](https://github.com/koi-language/koi)
+[![GitHub](https://img.shields.io/badge/GitHub-koi--language%2FKoi-6495ED?logo=github)](https://github.com/koi-language/Koi)
 [![VSCode Extension](https://img.shields.io/badge/VSCode-Extension-007ACC?logo=visualstudiocode)](vscode-koi-extension/)
 [![Syntax Highlighting](https://img.shields.io/badge/GitHub-Syntax_Highlighting-6495ED?logo=github)](LINGUIST.md)
 
 Koi is a multi-agent orchestration language with role-based routing.
+
+## Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/koi-language/Koi/main/install.sh | bash
+```
 
 > **🚀 New to Koi?** Check out the [Quick Start Guide](QUICKSTART.md) for a 2-minute setup!
 >
@@ -58,7 +64,7 @@ See [doc/07-routing.md](doc/07-routing.md) and [doc/08-task-chaining.md](doc/08-
 **Quick install (recommended):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/koi-language/koi/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/koi-language/Koi/main/install.sh | bash
 ```
 
 This will install KOI to `~/.koi` and add the `koi` command to your PATH.
@@ -531,8 +537,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## Community
 
-- **Issues**: [github.com/koi-language/koi/issues](https://github.com/koi-language/koi/issues)
-- **Discussions**: [github.com/koi-language/koi/discussions](https://github.com/koi-language/koi/discussions)
+- **Issues**: [github.com/koi-language/Koi/issues](https://github.com/koi-language/Koi/issues)
+- **Discussions**: [github.com/koi-language/Koi/discussions](https://github.com/koi-language/Koi/discussions)
 
 ## License
 
