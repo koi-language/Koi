@@ -462,7 +462,7 @@ SendStatement
     }
 
 SendTarget
-  = base:PostfixExpression filters:SendFilter* {
+  = base:PrimaryExpression filters:SendFilter* {
       return { base, filters, location: location() };
     }
 
