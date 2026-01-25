@@ -79,8 +79,51 @@ export default {
       return { executed: conditionResult ? 'then' : 'else', result: null };
     }
 
-    // Execute actions using agent's executeActions method
-    const result = await agent.executeActions(actionsToExecute);
+    // Execute actions with inherited context (so nested actions can access a1, a2, etc.)
+    // We need to execute them manually to preserve the parent context
+    const actionRegistry = (await import('../action-registry.js')).actionRegistry;
+    const cliLogger = (await import('../cli-logger.js')).cliLogger;
+
+    let result = null;
+    for (const nestedAction of actionsToExecute) {
+      // Resolve references using the parent context
+      const resolvedAction = agent.resolveActionReferences(nestedAction, context);
+
+      // Show progress
+      const intent = resolvedAction.intent || resolvedAction.type;
+      cliLogger.progress(`[${agent.name}] ${intent}`);
+
+      // Get action definition
+      const actionDef = actionRegistry.get(nestedAction.intent || nestedAction.type);
+
+      if (actionDef && actionDef.execute) {
+        // Update agent's current context for nested action
+        const previousContext = agent._currentActionContext;
+        agent._currentActionContext = context;
+
+        // Execute with agent
+        result = await actionDef.execute(resolvedAction, agent);
+
+        // Restore previous context
+        agent._currentActionContext = previousContext;
+
+        cliLogger.clear();
+
+        // Update parent context with result
+        if (result && typeof result === 'object') {
+          const resultForContext = JSON.parse(JSON.stringify(result));
+          context.results.push(resultForContext);
+
+          // Store with action ID if provided
+          if (nestedAction.id) {
+            context[nestedAction.id] = { output: resultForContext };
+          }
+        }
+      } else {
+        cliLogger.clear();
+        throw new Error(`Action ${nestedAction.intent || nestedAction.type} not found`);
+      }
+    }
 
     return {
       executed: conditionResult ? 'then' : 'else',
