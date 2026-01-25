@@ -10,15 +10,29 @@ Agent Assistant : Worker {
 
   on greet(args: Json) {
     playbook """
-    Ask the user for their name, then greet them personally.
+    Ask the user for their name, age, and whether they like programming.
 
-    Steps:
-    1. Ask the user "What is your name?" (text input)
-    2. Once you have their answer, greet them with a personalized message
-    3. Ask them "Do you want to continue?" with options: "Yes" and "No" (menu selection)
-    4. If they say "Yes", ask them for their age (text input)
-    5. Tell them something nice based on their age
-    6. If they say "No", say goodbye
+    EXACT STEPS:
+    1. Ask "What is your name?" (text input) - store with ID "a1"
+    2. Greet them with a personalized message using their name
+    3. Ask "Do you want to continue?" with options: ["Yes", "No"] - store with ID "a2"
+    4. Use the "if" action:
+       - condition: check if a2.output.answer equals 'Yes'
+       - then branch: [
+           Ask "What is your age?" (text input) with ID "a3",
+           Print a nice message about their age using template variable for a3.output.answer
+         ]
+       - else branch: [
+           Print "Goodbye! Maybe next time."
+         ]
+
+    IMPORTANT: Use the "if" action for conditional logic. Structure:
+    {
+      "intent": "if",
+      "condition": "template_variable === 'value'",
+      "then": [ array of action objects ],
+      "else": [ array of action objects ]
+    }
 
     Make it friendly and warm!
     """
