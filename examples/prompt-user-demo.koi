@@ -10,31 +10,21 @@ Agent Assistant : Worker {
 
   on greet(args: Json) {
     playbook """
-    Ask the user for their name, age, and whether they like programming.
+    EXACT SEQUENCE - Do each step once only:
 
-    EXACT STEPS:
-    1. Ask "What is your name?" (text input) - store with ID "a1"
-    2. Greet them with a personalized message using their name
-    3. Ask "Do you want to continue?" with options: ["Yes", "No"] - store with ID "a2"
-    4. Use the "if" action:
-       - condition: check if a2.output.answer equals 'Yes'
-       - then branch: [
-           Ask "What is your age?" (text input) with ID "a3",
-           Print a nice message about their age using template variable for a3.output.answer
+    1. prompt_user with question "What is your name?" - save as ID "a1"
+    2. print greeting: "Hello, ${a1.output.answer}! It's great to meet you!"
+    3. prompt_user with question "Do you want to continue?" and options ["Yes", "No"] - save as ID "a2"
+    4. if action with condition "${a2.output.answer} === 'Yes'":
+       - then: [
+           prompt_user with question "What is your age?" - save as ID "a3",
+           print "You are ${a3.output.answer} years old. That's a great age!"
          ]
-       - else branch: [
-           Print "Goodbye! Maybe next time."
+       - else: [
+           print "Goodbye! Maybe next time."
          ]
 
-    IMPORTANT: Use the "if" action for conditional logic. Structure:
-    {
-      "intent": "if",
-      "condition": "template_variable === 'value'",
-      "then": [ array of action objects ],
-      "else": [ array of action objects ]
-    }
-
-    Make it friendly and warm!
+    DO NOT repeat questions. Each prompt_user should happen exactly once.
     """
   }
 }
