@@ -236,8 +236,8 @@ export class Agent {
       try {
         const resolvedAction = this.resolveActionReferences(action, actionContext);
 
-        // Check condition if present
-        if (resolvedAction.condition !== undefined) {
+        // Check condition if present (but skip for "if" action which handles its own condition internally)
+        if (resolvedAction.condition !== undefined && resolvedAction.intent !== 'if' && resolvedAction.type !== 'if') {
           const conditionMet = this.evaluateCondition(resolvedAction.condition, actionContext);
           if (!conditionMet) {
             return; // Skip this action
@@ -445,7 +445,8 @@ export class Agent {
 
       // Check if action has a condition - skip if condition is false
       // IMPORTANT: Evaluate condition BEFORE the action executes, using current context
-      if (resolvedAction.condition !== undefined) {
+      // EXCEPTION: Skip this check for "if" action which handles its own condition internally
+      if (resolvedAction.condition !== undefined && resolvedAction.intent !== 'if' && resolvedAction.type !== 'if') {
         const conditionMet = this.evaluateCondition(resolvedAction.condition, context);
         if (!conditionMet) {
           // Skip this action silently
