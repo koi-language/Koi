@@ -922,6 +922,101 @@ CRITICAL RULES:
    },
    { "intent": "print", "message": "¡Hola! Tienes \${a3.output.answer} años" }  ← a3 doesn't exist if user said "No"!
 
+17. ITERATION/LOOPS - CRITICAL: Use iteration actions when playbook requests repeating actions:
+
+   A) FIXED NUMBER OF ITERATIONS - Use "repeat" action:
+      Keywords: "X veces" (X times), "pregunta 3 veces", "ask 5 times", "repite N veces"
+
+      STRUCTURE:
+      {
+        "intent": "repeat",
+        "count": N,
+        "actions": [ array of actions to repeat ]
+      }
+
+      EXAMPLE:
+      Playbook: "Pregunta al usuario 3 veces por su edad"
+      {
+        "intent": "repeat",
+        "count": 3,
+        "actions": [
+          { "id": "a1", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
+          { "intent": "print", "message": "Respuesta \${iteration}: \${a1.output.answer}" }
+        ]
+      }
+
+   B) CONDITIONAL ITERATION - Use "while" action:
+      Keywords: "hasta que" (until), "mientras" (while), "keep asking until", "repeat while"
+
+      TWO TYPES OF CONDITIONS:
+
+      B1) SIMPLE CONDITIONS - Use string condition for EXACT comparisons:
+          When: Exact string/number match, specific value comparison
+          Examples: "hasta que diga 'stop'", "while count < 10", "until answer equals 'yes'"
+
+          STRUCTURE:
+          {
+            "intent": "while",
+            "condition": "\${actionId.output.answer} !== 'stop'",
+            "max_iterations": 50,
+            "actions": [ array of actions to repeat ]
+          }
+
+          EXAMPLE:
+          Playbook: "Habla con el usuario hasta que te diga 'hasta luego'"
+          {
+            "intent": "while",
+            "condition": "\${a1.output.answer} !== 'hasta luego'",
+            "max_iterations": 50,
+            "actions": [
+              { "id": "a1", "intent": "prompt_user", "question": "¿De qué quieres hablar? (escribe 'hasta luego' para salir)" },
+              { "intent": "print", "message": "Dijiste: \${a1.output.answer}" }
+            ]
+          }
+
+      B2) SEMANTIC CONDITIONS - Use object condition with llm_eval for INTERPRETATION:
+          When: Semantic meaning, multiple valid phrases, natural language understanding
+          Examples: "hasta que se despida" (could be "adiós", "chao", "hasta luego", "me voy")
+                   "while user wants to continue" (could be "sí", "claro", "dale", "ok")
+                   "until user seems frustrated" (needs sentiment analysis)
+
+          STRUCTURE:
+          {
+            "intent": "while",
+            "condition": {
+              "llm_eval": true,
+              "instruction": "Question for LLM to answer with true/false",
+              "data": "\${actionId.output.answer}"
+            },
+            "max_iterations": 50,
+            "actions": [ array of actions to repeat ]
+          }
+
+          EXAMPLE:
+          Playbook: "Habla con el usuario hasta que se despida"
+          {
+            "intent": "while",
+            "condition": {
+              "llm_eval": true,
+              "instruction": "¿El usuario se está despidiendo o quiere terminar la conversación?",
+              "data": "\${a1.output.answer}"
+            },
+            "max_iterations": 50,
+            "actions": [
+              { "id": "a1", "intent": "prompt_user", "question": "¿De qué quieres hablar?" },
+              { "intent": "print", "message": "Interesante: \${a1.output.answer}" }
+            ]
+          }
+          ↑ This will recognize "adiós", "chao", "hasta luego", "me voy", "ya me voy", etc.
+
+      DECISION RULE - Which type to use?
+      → Playbook mentions EXACT phrase ("hasta que diga 'stop'")? → Use B1 (simple condition)
+      → Playbook describes MEANING/INTENT ("hasta que se despida", "while user wants")? → Use B2 (semantic condition)
+
+      CRITICAL: The condition is evaluated BEFORE each iteration.
+      - For simple conditions: Use !== for "until" semantics (continue while NOT met)
+      - For semantic conditions: Frame instruction as "Is the stop condition met?" (returns true to STOP)
+
 RESPONSE FORMAT (ALWAYS use this):
 {
   "actions": [
@@ -1201,6 +1296,101 @@ CRITICAL RULES:
      "else": []
    },
    { "intent": "print", "message": "¡Hola! Tienes \${a3.output.answer} años" }  ← a3 doesn't exist if user said "No"!
+
+17. ITERATION/LOOPS - CRITICAL: Use iteration actions when playbook requests repeating actions:
+
+   A) FIXED NUMBER OF ITERATIONS - Use "repeat" action:
+      Keywords: "X veces" (X times), "pregunta 3 veces", "ask 5 times", "repite N veces"
+
+      STRUCTURE:
+      {
+        "intent": "repeat",
+        "count": N,
+        "actions": [ array of actions to repeat ]
+      }
+
+      EXAMPLE:
+      Playbook: "Pregunta al usuario 3 veces por su edad"
+      {
+        "intent": "repeat",
+        "count": 3,
+        "actions": [
+          { "id": "a1", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
+          { "intent": "print", "message": "Respuesta \${iteration}: \${a1.output.answer}" }
+        ]
+      }
+
+   B) CONDITIONAL ITERATION - Use "while" action:
+      Keywords: "hasta que" (until), "mientras" (while), "keep asking until", "repeat while"
+
+      TWO TYPES OF CONDITIONS:
+
+      B1) SIMPLE CONDITIONS - Use string condition for EXACT comparisons:
+          When: Exact string/number match, specific value comparison
+          Examples: "hasta que diga 'stop'", "while count < 10", "until answer equals 'yes'"
+
+          STRUCTURE:
+          {
+            "intent": "while",
+            "condition": "\${actionId.output.answer} !== 'stop'",
+            "max_iterations": 50,
+            "actions": [ array of actions to repeat ]
+          }
+
+          EXAMPLE:
+          Playbook: "Habla con el usuario hasta que te diga 'hasta luego'"
+          {
+            "intent": "while",
+            "condition": "\${a1.output.answer} !== 'hasta luego'",
+            "max_iterations": 50,
+            "actions": [
+              { "id": "a1", "intent": "prompt_user", "question": "¿De qué quieres hablar? (escribe 'hasta luego' para salir)" },
+              { "intent": "print", "message": "Dijiste: \${a1.output.answer}" }
+            ]
+          }
+
+      B2) SEMANTIC CONDITIONS - Use object condition with llm_eval for INTERPRETATION:
+          When: Semantic meaning, multiple valid phrases, natural language understanding
+          Examples: "hasta que se despida" (could be "adiós", "chao", "hasta luego", "me voy")
+                   "while user wants to continue" (could be "sí", "claro", "dale", "ok")
+                   "until user seems frustrated" (needs sentiment analysis)
+
+          STRUCTURE:
+          {
+            "intent": "while",
+            "condition": {
+              "llm_eval": true,
+              "instruction": "Question for LLM to answer with true/false",
+              "data": "\${actionId.output.answer}"
+            },
+            "max_iterations": 50,
+            "actions": [ array of actions to repeat ]
+          }
+
+          EXAMPLE:
+          Playbook: "Habla con el usuario hasta que se despida"
+          {
+            "intent": "while",
+            "condition": {
+              "llm_eval": true,
+              "instruction": "¿El usuario se está despidiendo o quiere terminar la conversación?",
+              "data": "\${a1.output.answer}"
+            },
+            "max_iterations": 50,
+            "actions": [
+              { "id": "a1", "intent": "prompt_user", "question": "¿De qué quieres hablar?" },
+              { "intent": "print", "message": "Interesante: \${a1.output.answer}" }
+            ]
+          }
+          ↑ This will recognize "adiós", "chao", "hasta luego", "me voy", "ya me voy", etc.
+
+      DECISION RULE - Which type to use?
+      → Playbook mentions EXACT phrase ("hasta que diga 'stop'")? → Use B1 (simple condition)
+      → Playbook describes MEANING/INTENT ("hasta que se despida", "while user wants")? → Use B2 (semantic condition)
+
+      CRITICAL: The condition is evaluated BEFORE each iteration.
+      - For simple conditions: Use !== for "until" semantics (continue while NOT met)
+      - For semantic conditions: Frame instruction as "Is the stop condition met?" (returns true to STOP)
 
 RESPONSE FORMAT (ALWAYS use this):
 {
@@ -1623,6 +1813,101 @@ CRITICAL RULES:
      "else": []
    },
    { "intent": "print", "message": "¡Hola! Tienes \${a3.output.answer} años" }  ← a3 doesn't exist if user said "No"!
+
+17. ITERATION/LOOPS - CRITICAL: Use iteration actions when playbook requests repeating actions:
+
+   A) FIXED NUMBER OF ITERATIONS - Use "repeat" action:
+      Keywords: "X veces" (X times), "pregunta 3 veces", "ask 5 times", "repite N veces"
+
+      STRUCTURE:
+      {
+        "intent": "repeat",
+        "count": N,
+        "actions": [ array of actions to repeat ]
+      }
+
+      EXAMPLE:
+      Playbook: "Pregunta al usuario 3 veces por su edad"
+      {
+        "intent": "repeat",
+        "count": 3,
+        "actions": [
+          { "id": "a1", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
+          { "intent": "print", "message": "Respuesta \${iteration}: \${a1.output.answer}" }
+        ]
+      }
+
+   B) CONDITIONAL ITERATION - Use "while" action:
+      Keywords: "hasta que" (until), "mientras" (while), "keep asking until", "repeat while"
+
+      TWO TYPES OF CONDITIONS:
+
+      B1) SIMPLE CONDITIONS - Use string condition for EXACT comparisons:
+          When: Exact string/number match, specific value comparison
+          Examples: "hasta que diga 'stop'", "while count < 10", "until answer equals 'yes'"
+
+          STRUCTURE:
+          {
+            "intent": "while",
+            "condition": "\${actionId.output.answer} !== 'stop'",
+            "max_iterations": 50,
+            "actions": [ array of actions to repeat ]
+          }
+
+          EXAMPLE:
+          Playbook: "Habla con el usuario hasta que te diga 'hasta luego'"
+          {
+            "intent": "while",
+            "condition": "\${a1.output.answer} !== 'hasta luego'",
+            "max_iterations": 50,
+            "actions": [
+              { "id": "a1", "intent": "prompt_user", "question": "¿De qué quieres hablar? (escribe 'hasta luego' para salir)" },
+              { "intent": "print", "message": "Dijiste: \${a1.output.answer}" }
+            ]
+          }
+
+      B2) SEMANTIC CONDITIONS - Use object condition with llm_eval for INTERPRETATION:
+          When: Semantic meaning, multiple valid phrases, natural language understanding
+          Examples: "hasta que se despida" (could be "adiós", "chao", "hasta luego", "me voy")
+                   "while user wants to continue" (could be "sí", "claro", "dale", "ok")
+                   "until user seems frustrated" (needs sentiment analysis)
+
+          STRUCTURE:
+          {
+            "intent": "while",
+            "condition": {
+              "llm_eval": true,
+              "instruction": "Question for LLM to answer with true/false",
+              "data": "\${actionId.output.answer}"
+            },
+            "max_iterations": 50,
+            "actions": [ array of actions to repeat ]
+          }
+
+          EXAMPLE:
+          Playbook: "Habla con el usuario hasta que se despida"
+          {
+            "intent": "while",
+            "condition": {
+              "llm_eval": true,
+              "instruction": "¿El usuario se está despidiendo o quiere terminar la conversación?",
+              "data": "\${a1.output.answer}"
+            },
+            "max_iterations": 50,
+            "actions": [
+              { "id": "a1", "intent": "prompt_user", "question": "¿De qué quieres hablar?" },
+              { "intent": "print", "message": "Interesante: \${a1.output.answer}" }
+            ]
+          }
+          ↑ This will recognize "adiós", "chao", "hasta luego", "me voy", "ya me voy", etc.
+
+      DECISION RULE - Which type to use?
+      → Playbook mentions EXACT phrase ("hasta que diga 'stop'")? → Use B1 (simple condition)
+      → Playbook describes MEANING/INTENT ("hasta que se despida", "while user wants")? → Use B2 (semantic condition)
+
+      CRITICAL: The condition is evaluated BEFORE each iteration.
+      - For simple conditions: Use !== for "until" semantics (continue while NOT met)
+      - For semantic conditions: Frame instruction as "Is the stop condition met?" (returns true to STOP)
 
 RESPONSE FORMAT (ALWAYS use this):
 {
