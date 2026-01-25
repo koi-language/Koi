@@ -782,17 +782,31 @@ CRITICAL RULES:
    - Actions without "id" won't save their output (use for print, one-time actions)
    - Sequential IDs: a1, a2, a3, ... (only for actions that need saving)
    - Example: { "id": "a1", "intent": "getUser" } → later use \${a1.output.name}
-8. CRITICAL - DATE/AGE CALCULATIONS & TEXT GENERATION: If playbook contains text templates with {x}, {age}, {días}, {dd/mm/yyyy} or any placeholder:
-   - NEVER generate template expressions with Date arithmetic
-   - MANDATORY: Use format action with the data array
-   - CRITICAL: Copy the COMPLETE template from playbook to format action's "instruction" - preserve ALL details:
-     * Keep ALL conditional logic (e.g., "Estimado o Estimada si es chica, deducelo por el nombre")
-     * Preserve ALL line breaks/spacing (use \n in instruction string for each line break in template)
-     * Keep original language and exact wording
-     * Don't simplify, paraphrase, or omit any part of the template
-   - ❌ ABSOLUTELY WRONG: print with "\${2023 - new Date(birthdate).getFullYear()}" or any Date calculations
-   - ❌ WRONG: Simplifying template from "Estimado (o Estimada si es chica) <nombre>,\n\nComo sabemos..." to "Estimado {name}, Como sabemos..."
-   - ✅ RIGHT: { "id": "formatted", "intent": "format", "data": "\${usersArray}", "instruction": "For each user write:\n\nEstimado (o Estimada si es chica, deducelo por el nombre) {name},\n\nComo sabemos que usted tiene {age} años, le queremos dar la enhorabuena!\n\nAtentamente,\nLa empresa!!\n\nSeparate emails with blank line" }, then print "\${formatted.output.formatted}"
+8. CRITICAL - DYNAMIC/CREATIVE CONTENT GENERATION: Use format action when content must be generated based on analyzing data:
+
+   A) DATE/AGE CALCULATIONS - If playbook has {age}, {días}, {dd/mm/yyyy} or date placeholders:
+      - NEVER generate template expressions with Date arithmetic
+      - MANDATORY: Use format action with the data array
+      - ❌ ABSOLUTELY WRONG: print with "\${2023 - new Date(birthdate).getFullYear()}"
+      - ✅ RIGHT: { "id": "formatted", "intent": "format", "data": "\${usersArray}", "instruction": "Calculate age from birthdate..." }
+
+   B) CREATIVE/ADAPTIVE CONTENT - If playbook requests content that must adapt to data values:
+      - DETECT keywords: "bromea", "joke", "personaliza", "personalize", "comenta", "comment", "genera", "generate", "apropiado", "appropriate"
+      - If text should be DIFFERENT based on data (e.g., different joke for age 20 vs age 80), use format action
+      - NEVER hardcode creative content during planning - generate it at runtime based on actual data
+
+      ❌ WRONG - Static creative content (same joke for any age):
+      { "intent": "print", "message": "Tienes \${a3.output.answer} años, ¡no te preocupes, la edad es solo un número!" }
+
+      ✅ RIGHT - Dynamic creative content (adapts to actual age):
+      { "id": "a4", "intent": "format", "data": { "nombre": "\${a1.output.answer}", "edad": "\${a3.output.answer}" }, "instruction": "Genera un saludo personalizado para {nombre} y una broma creativa sobre tener {edad} años. La broma debe ser apropiada y diferente según la edad específica." },
+      { "intent": "print", "message": "\${a4.output.formatted}" }
+
+   C) COMPLEX TEMPLATES - Copy COMPLETE template from playbook to format instruction:
+      - Keep ALL conditional logic (e.g., "Estimado o Estimada si es chica, deducelo por el nombre")
+      - Preserve ALL line breaks/spacing (use \n in instruction string)
+      - Keep original language and exact wording
+      - Don't simplify, paraphrase, or omit any part
 9. NEVER use .map() or arrow functions with nested template literals in template variables:
    - ❌ ABSOLUTELY WRONG: \${array.map(item => \`text \${item.field}\`).join('\\n')} (nested templates CANNOT be evaluated)
    - ❌ WRONG: print with "\${users.map(u => \`| \${u.name} | \${u.age} |\`).join('\\n')}" (will print literal template string)
@@ -1038,17 +1052,31 @@ CRITICAL RULES:
    - Actions without "id" won't save their output (use for print, one-time actions)
    - Sequential IDs: a1, a2, a3, ... (only for actions that need saving)
    - Example: { "id": "a1", "intent": "getUser" } → later use \${a1.output.name}
-8. CRITICAL - DATE/AGE CALCULATIONS & TEXT GENERATION: If playbook contains text templates with {x}, {age}, {días}, {dd/mm/yyyy} or any placeholder:
-   - NEVER generate template expressions with Date arithmetic
-   - MANDATORY: Use format action with the data array
-   - CRITICAL: Copy the COMPLETE template from playbook to format action's "instruction" - preserve ALL details:
-     * Keep ALL conditional logic (e.g., "Estimado o Estimada si es chica, deducelo por el nombre")
-     * Preserve ALL line breaks/spacing (use \n in instruction string for each line break in template)
-     * Keep original language and exact wording
-     * Don't simplify, paraphrase, or omit any part of the template
-   - ❌ ABSOLUTELY WRONG: print with "\${2023 - new Date(birthdate).getFullYear()}" or any Date calculations
-   - ❌ WRONG: Simplifying template from "Estimado (o Estimada si es chica) <nombre>,\n\nComo sabemos..." to "Estimado {name}, Como sabemos..."
-   - ✅ RIGHT: { "id": "formatted", "intent": "format", "data": "\${usersArray}", "instruction": "For each user write:\n\nEstimado (o Estimada si es chica, deducelo por el nombre) {name},\n\nComo sabemos que usted tiene {age} años, le queremos dar la enhorabuena!\n\nAtentamente,\nLa empresa!!\n\nSeparate emails with blank line" }, then print "\${formatted.output.formatted}"
+8. CRITICAL - DYNAMIC/CREATIVE CONTENT GENERATION: Use format action when content must be generated based on analyzing data:
+
+   A) DATE/AGE CALCULATIONS - If playbook has {age}, {días}, {dd/mm/yyyy} or date placeholders:
+      - NEVER generate template expressions with Date arithmetic
+      - MANDATORY: Use format action with the data array
+      - ❌ ABSOLUTELY WRONG: print with "\${2023 - new Date(birthdate).getFullYear()}"
+      - ✅ RIGHT: { "id": "formatted", "intent": "format", "data": "\${usersArray}", "instruction": "Calculate age from birthdate..." }
+
+   B) CREATIVE/ADAPTIVE CONTENT - If playbook requests content that must adapt to data values:
+      - DETECT keywords: "bromea", "joke", "personaliza", "personalize", "comenta", "comment", "genera", "generate", "apropiado", "appropriate"
+      - If text should be DIFFERENT based on data (e.g., different joke for age 20 vs age 80), use format action
+      - NEVER hardcode creative content during planning - generate it at runtime based on actual data
+
+      ❌ WRONG - Static creative content (same joke for any age):
+      { "intent": "print", "message": "Tienes \${a3.output.answer} años, ¡no te preocupes, la edad es solo un número!" }
+
+      ✅ RIGHT - Dynamic creative content (adapts to actual age):
+      { "id": "a4", "intent": "format", "data": { "nombre": "\${a1.output.answer}", "edad": "\${a3.output.answer}" }, "instruction": "Genera un saludo personalizado para {nombre} y una broma creativa sobre tener {edad} años. La broma debe ser apropiada y diferente según la edad específica." },
+      { "intent": "print", "message": "\${a4.output.formatted}" }
+
+   C) COMPLEX TEMPLATES - Copy COMPLETE template from playbook to format instruction:
+      - Keep ALL conditional logic (e.g., "Estimado o Estimada si es chica, deducelo por el nombre")
+      - Preserve ALL line breaks/spacing (use \n in instruction string)
+      - Keep original language and exact wording
+      - Don't simplify, paraphrase, or omit any part
 9. NEVER use .map() or arrow functions with nested template literals in template variables:
    - ❌ ABSOLUTELY WRONG: \${array.map(item => \`text \${item.field}\`).join('\\n')} (nested templates CANNOT be evaluated)
    - ❌ WRONG: print with "\${users.map(u => \`| \${u.name} | \${u.age} |\`).join('\\n')}" (will print literal template string)
@@ -1436,17 +1464,31 @@ CRITICAL RULES:
    - Actions without "id" won't save their output (use for print, one-time actions)
    - Sequential IDs: a1, a2, a3, ... (only for actions that need saving)
    - Example: { "id": "a1", "intent": "getUser" } → later use \${a1.output.name}
-8. CRITICAL - DATE/AGE CALCULATIONS & TEXT GENERATION: If playbook contains text templates with {x}, {age}, {días}, {dd/mm/yyyy} or any placeholder:
-   - NEVER generate template expressions with Date arithmetic
-   - MANDATORY: Use format action with the data array
-   - CRITICAL: Copy the COMPLETE template from playbook to format action's "instruction" - preserve ALL details:
-     * Keep ALL conditional logic (e.g., "Estimado o Estimada si es chica, deducelo por el nombre")
-     * Preserve ALL line breaks/spacing (use \n in instruction string for each line break in template)
-     * Keep original language and exact wording
-     * Don't simplify, paraphrase, or omit any part of the template
-   - ❌ ABSOLUTELY WRONG: print with "\${2023 - new Date(birthdate).getFullYear()}" or any Date calculations
-   - ❌ WRONG: Simplifying template from "Estimado (o Estimada si es chica) <nombre>,\n\nComo sabemos..." to "Estimado {name}, Como sabemos..."
-   - ✅ RIGHT: { "id": "formatted", "intent": "format", "data": "\${usersArray}", "instruction": "For each user write:\n\nEstimado (o Estimada si es chica, deducelo por el nombre) {name},\n\nComo sabemos que usted tiene {age} años, le queremos dar la enhorabuena!\n\nAtentamente,\nLa empresa!!\n\nSeparate emails with blank line" }, then print "\${formatted.output.formatted}"
+8. CRITICAL - DYNAMIC/CREATIVE CONTENT GENERATION: Use format action when content must be generated based on analyzing data:
+
+   A) DATE/AGE CALCULATIONS - If playbook has {age}, {días}, {dd/mm/yyyy} or date placeholders:
+      - NEVER generate template expressions with Date arithmetic
+      - MANDATORY: Use format action with the data array
+      - ❌ ABSOLUTELY WRONG: print with "\${2023 - new Date(birthdate).getFullYear()}"
+      - ✅ RIGHT: { "id": "formatted", "intent": "format", "data": "\${usersArray}", "instruction": "Calculate age from birthdate..." }
+
+   B) CREATIVE/ADAPTIVE CONTENT - If playbook requests content that must adapt to data values:
+      - DETECT keywords: "bromea", "joke", "personaliza", "personalize", "comenta", "comment", "genera", "generate", "apropiado", "appropriate"
+      - If text should be DIFFERENT based on data (e.g., different joke for age 20 vs age 80), use format action
+      - NEVER hardcode creative content during planning - generate it at runtime based on actual data
+
+      ❌ WRONG - Static creative content (same joke for any age):
+      { "intent": "print", "message": "Tienes \${a3.output.answer} años, ¡no te preocupes, la edad es solo un número!" }
+
+      ✅ RIGHT - Dynamic creative content (adapts to actual age):
+      { "id": "a4", "intent": "format", "data": { "nombre": "\${a1.output.answer}", "edad": "\${a3.output.answer}" }, "instruction": "Genera un saludo personalizado para {nombre} y una broma creativa sobre tener {edad} años. La broma debe ser apropiada y diferente según la edad específica." },
+      { "intent": "print", "message": "\${a4.output.formatted}" }
+
+   C) COMPLEX TEMPLATES - Copy COMPLETE template from playbook to format instruction:
+      - Keep ALL conditional logic (e.g., "Estimado o Estimada si es chica, deducelo por el nombre")
+      - Preserve ALL line breaks/spacing (use \n in instruction string)
+      - Keep original language and exact wording
+      - Don't simplify, paraphrase, or omit any part
 9. NEVER use .map() or arrow functions with nested template literals in template variables:
    - ❌ ABSOLUTELY WRONG: \${array.map(item => \`text \${item.field}\`).join('\\n')} (nested templates CANNOT be evaluated)
    - ❌ WRONG: print with "\${users.map(u => \`| \${u.name} | \${u.age} |\`).join('\\n')}" (will print literal template string)
