@@ -8,7 +8,7 @@ import { cliLogger } from '../cli-logger.js';
 export default {
   type: 'prompt_user',
   intent: 'prompt_user',
-  description: 'Ask the user a question via command line and get their text response',
+  description: 'Ask the user a question via command line and get their text response → Returns: { answer }. Access the user\'s input with ${id.output.answer}',
   permission: 'execute', // Requires execute permission
 
   schema: {
@@ -27,9 +27,10 @@ export default {
   },
 
   examples: [
-    { id: 'a1', intent: 'prompt_user', question: 'What is your age?' },
-    { id: 'a2', intent: 'prompt_user', question: 'Enter the file path:', prompt: 'Path: ' },
-    { id: 'a3', intent: 'prompt_user', question: 'Do you want to continue?', prompt: '(y/n) ' }
+    { id: 'a1', intent: 'prompt_user', question: 'What is your name?' },
+    { intent: 'print', message: 'Hello ${a1.output.answer}!' },
+    { id: 'a2', intent: 'prompt_user', question: 'What is your age?' },
+    { intent: 'print', message: 'You are ${a2.output.answer} years old' }
   ],
 
   // Executor function - receives the action and agent context
