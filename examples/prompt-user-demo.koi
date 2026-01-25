@@ -1,0 +1,26 @@
+// Demo: Prompt User Action
+// Shows how agents can ask users for input during execution
+
+package "prompt-user-demo"
+
+role Worker { can execute }
+
+Agent Assistant : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini" }
+
+  on greet(args: Json) {
+    playbook """
+    Ask the user for their name, then greet them personally.
+
+    Steps:
+    1. Ask the user "What is your name?"
+    2. Once you have their answer, greet them with a personalized message
+    3. Ask them for their age
+    4. Tell them something nice based on their age
+
+    Make it friendly and warm!
+    """
+  }
+}
+
+run Assistant.greet({})

@@ -988,6 +988,8 @@ export class KoiTranspiler {
         return this.generateTemplateLiteral(node);
       case 'AssignmentExpression':
         return this.generateAssignment(node);
+      case 'ConditionalExpression':
+        return `(${this.generateExpression(node.test)} ? ${this.generateExpression(node.consequent)} : ${this.generateExpression(node.alternate)})`;
       default:
         return `/* Unknown expr: ${node.type} */`;
     }

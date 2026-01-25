@@ -35,13 +35,7 @@ Agent Orchestrator : Lead {
   uses Team SimpleTeam
 
   on start(args: Json) {
-    const greeting =
-      await send peers.event("greet").role(Worker).any()({ name: "Koi" }) timeout 5s
-
-    const processed =
-      await send peers.event("process").role(Worker).any()({ message: greeting.message }) timeout 5s
-
-    return processed
+    await send peers.event("greet").role(Worker).any()({ name: "Koi" })
   }
 }
 
