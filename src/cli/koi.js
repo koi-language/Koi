@@ -422,7 +422,6 @@ async function runFile(sourcePath, options = {}) {
     env.KOI_DEBUG_LLM = '1';
   }
 
-  // Use tsx to run the compiled code (supports TypeScript syntax in function bodies)
   const child = spawn('npx', ['tsx', jsPath], {
     stdio: 'inherit',
     env,
