@@ -116,7 +116,11 @@ export class KoiTranspiler {
     // Store routerImportPath for later use
     this.routerImportPath = routerImportPath;
 
-    code += this.emit(`import { Agent, Team, Skill, Role, Runtime, SkillRegistry, skillSelector, registry } from '${runtimeImportPath}';\n\n`);
+    code += this.emit(`import { Agent, Team, Skill, Role, Runtime, SkillRegistry, skillSelector, registry } from '${runtimeImportPath}';\n`);
+
+    // Add CommonJS compatibility for require() in ES modules
+    code += this.emit(`import { createRequire } from 'module';\n`);
+    code += this.emit(`const require = createRequire(import.meta.url);\n\n`);
 
     // Generate imports for external TypeScript/JavaScript modules
     if (this.externalImports && this.externalImports.length > 0) {
@@ -542,6 +546,36 @@ export class KoiTranspiler {
     }
     code += this.emit(`// ============================================================\n\n`);
 
+    // Generate skill-level constants
+    if (node.constants && node.constants.length > 0) {
+      for (const constDecl of node.constants) {
+        const value = this.generateExpression(constDecl.value);
+        if (constDecl.destructuring && constDecl.pattern) {
+          const pattern = this.generateDestructuringPattern(constDecl.pattern);
+          code += this.emit(`const ${pattern} = ${value};\n`);
+        } else {
+          code += this.emit(`const ${constDecl.name.name} = ${value};\n`);
+        }
+      }
+      code += this.emit(`\n`);
+    }
+
+    // Generate skill-level variables
+    if (node.variables && node.variables.length > 0) {
+      for (const varDecl of node.variables) {
+        if (varDecl.value) {
+          const value = this.generateExpression(varDecl.value);
+          code += this.emit(`let ${varDecl.name.name} = ${value};\n`);
+        } else if (varDecl.init) {
+          const initValue = this.generateExpression(varDecl.init);
+          code += this.emit(`let ${varDecl.name.name} = ${initValue};\n`);
+        } else {
+          code += this.emit(`let ${varDecl.name.name};\n`);
+        }
+      }
+      code += this.emit(`\n`);
+    }
+
     // Generate internal agents
     if (node.agents && node.agents.length > 0) {
       for (const agent of node.agents) {
@@ -885,6 +919,8 @@ export class KoiTranspiler {
         return node.name;
       case 'StringLiteral':
         return JSON.stringify(node.value);
+      case 'RegexLiteral':
+        return `/${node.pattern}/${node.flags}`;
       case 'NumberLiteral':
         return String(node.value);
       case 'BooleanLiteral':
@@ -1009,23 +1045,24 @@ export class KoiTranspiler {
 
     const callee = this.generateExpression(node.callee);
     const args = node.arguments.map(arg => this.generateExpression(arg)).join(', ');
-    return `${callee}(${args})`;
+    return node.optional ? `${callee}?.(${args})` : `${callee}(${args})`;
   }
 
   generateMember(node) {
     const obj = this.generateExpression(node.object);
+    const optionalChain = node.optional ? '?' : '';
 
     // Check if property is computed (array access with brackets)
     if (node.computed || node.property.type === 'NumberLiteral') {
       const prop = this.generateExpression(node.property);
-      return `${obj}[${prop}]`;
+      return node.optional ? `${obj}?.[${prop}]` : `${obj}[${prop}]`;
     }
 
     // Regular property access with dot notation
     const prop = typeof node.property === 'string'
       ? node.property
       : node.property.name || this.generateExpression(node.property);
-    return `${obj}.${prop}`;
+    return `${obj}${optionalChain}.${prop}`;
   }
 
   generateObject(node) {
@@ -1050,9 +1087,34 @@ export class KoiTranspiler {
     return `[${elements}]`;
   }
 
+  generateDestructuringPattern(pattern) {
+    if (pattern.type === 'ObjectPattern') {
+      const props = pattern.properties.map(prop => {
+        if (prop.shorthand) {
+          return prop.key.name;
+        } else {
+          return `${prop.key.name}: ${prop.value.name}`;
+        }
+      }).join(', ');
+      return `{ ${props} }`;
+    } else if (pattern.type === 'ArrayPattern') {
+      const elements = pattern.elements.map(el => {
+        if (el.type === 'Identifier') {
+          return el.name;
+        } else if (el.type === 'ObjectPattern' || el.type === 'ArrayPattern') {
+          return this.generateDestructuringPattern(el);
+        }
+        return '';
+      }).join(', ');
+      return `[${elements}]`;
+    }
+    return '';
+  }
+
   generateArrowFunction(node) {
     // Generate parameters
     const params = node.params.map(p => p.name || p).join(', ');
+    const asyncKeyword = node.isAsync ? 'async ' : '';
 
     // Generate body
     if (node.body.type === 'BlockStatement') {
@@ -1064,17 +1126,17 @@ export class KoiTranspiler {
       }
       this.indent--;
       body += `${this.getIndent()}}`;
-      return `(${params}) => ${body}`;
+      return `${asyncKeyword}(${params}) => ${body}`;
     } else {
       // Expression body (implicit return)
       const body = this.generateExpression(node.body);
 
       // If body is an object literal, wrap it in parentheses to avoid ambiguity
       if (node.body.type === 'ObjectLiteral') {
-        return `(${params}) => (${body})`;
+        return `${asyncKeyword}(${params}) => (${body})`;
       }
 
-      return `(${params}) => ${body}`;
+      return `${asyncKeyword}(${params}) => ${body}`;
     }
   }
 

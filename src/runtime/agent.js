@@ -1324,17 +1324,68 @@ Execute this task and return the result as JSON.
   }
 
 
-  async callSkill(skillName, input) {
-    // Calling skill
+  async callSkill(skillName, functionNameOrInput, inputOrUndefined) {
+    // Support two calling conventions:
+    // 1. callSkill(skillName, functionName, input) - call specific function
+    // 2. callSkill(skillName, input) - legacy: find matching function by intent
+
+    let functionName, input;
+
+    if (inputOrUndefined !== undefined) {
+      // 3-argument form: callSkill(skillName, functionName, input)
+      functionName = functionNameOrInput;
+      input = inputOrUndefined;
+    } else if (typeof functionNameOrInput === 'string') {
+      // 2-argument form with string: treat as functionName with empty input
+      functionName = functionNameOrInput;
+      input = {};
+    } else {
+      // 2-argument form with object: legacy behavior (find by intent)
+      functionName = null;
+      input = functionNameOrInput;
+    }
 
     if (!this.skills.includes(skillName)) {
       throw new Error(`Agent ${this.name} does not have skill: ${skillName}`);
     }
 
-    // In a real implementation, this would look up and execute the skill
-    // For now, we'll simulate it
-    // Skill processing
-    return { success: true, skill: skillName, input };
+    // Access SkillRegistry from global scope
+    if (typeof globalThis.SkillRegistry === 'undefined') {
+      throw new Error(`SkillRegistry not available. Make sure skills are properly registered.`);
+    }
+
+    if (functionName) {
+      // Call specific function
+      const skillFunc = globalThis.SkillRegistry.get(skillName, functionName);
+      if (!skillFunc) {
+        // List available functions for better error message
+        const availableFuncs = Object.keys(globalThis.SkillRegistry.getAll(skillName) || {});
+        throw new Error(`Function '${functionName}' not found in skill '${skillName}'. Available functions: ${availableFuncs.join(', ') || 'none'}`);
+      }
+
+      console.log(`  🔧 [${this.name}] Calling ${skillName}.${functionName}...`);
+      const result = await skillFunc.fn(input);
+      return result;
+    } else {
+      // Legacy: find matching function by looking at all functions in the skill
+      const skillFunctions = globalThis.SkillRegistry.getAll(skillName);
+      const funcNames = Object.keys(skillFunctions);
+
+      if (funcNames.length === 0) {
+        throw new Error(`Skill '${skillName}' has no registered functions`);
+      }
+
+      // If only one function, call it directly
+      if (funcNames.length === 1) {
+        const funcName = funcNames[0];
+        console.log(`  🔧 [${this.name}] Calling ${skillName}.${funcName}...`);
+        const result = await skillFunctions[funcName].fn(input);
+        return result;
+      }
+
+      // Multiple functions - for now, throw an error asking for specific function
+      throw new Error(`Skill '${skillName}' has multiple functions (${funcNames.join(', ')}). Please specify which function to call.`);
+    }
   }
 
   /**
