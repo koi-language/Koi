@@ -57,12 +57,21 @@ export default {
       throw new Error('if action requires a "condition" field');
     }
 
-    // Evaluate condition
+    // Get the current action context from the agent
+    const context = agent._currentActionContext || {
+      state: agent.state,
+      results: []
+    };
+
+    // Resolve condition using agent's resolveObjectReferences
+    // This properly handles ${a1.output.answer} template variables
+    const resolvedCondition = agent.resolveObjectReferences(condition, context);
+
+    // Evaluate condition using agent's evaluateCondition method
+    // This properly handles boolean expressions with context
     let conditionResult = false;
     try {
-      // The condition comes already interpolated from the LLM with template variables replaced
-      // We just need to evaluate it as a JavaScript expression
-      conditionResult = eval(condition);
+      conditionResult = agent.evaluateCondition(resolvedCondition, context);
     } catch (error) {
       throw new Error(`Failed to evaluate condition "${condition}": ${error.message}`);
     }

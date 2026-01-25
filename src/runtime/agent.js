@@ -263,7 +263,10 @@ export class Agent {
 
           if (actionDef && actionDef.execute) {
             // Fast path: execute registered action
+            // Store current context in agent for actions that need it (like 'if')
+            this._currentActionContext = actionContext;
             result = await actionDef.execute(resolvedAction, this);
+            delete this._currentActionContext;
           } else if (action.intent || action.description) {
             // Resolve via router (legacy fallback)
             result = await this.resolveAction(resolvedAction, actionContext);
@@ -470,7 +473,10 @@ export class Agent {
 
         if (actionDef && actionDef.execute) {
           // Fast path: execute registered action
+          // Store current context in agent for actions that need it (like 'if')
+          this._currentActionContext = context;
           finalResult = await actionDef.execute(resolvedAction, this);
+          delete this._currentActionContext;
 
           // Special handling for return action with conditions
           if ((action.intent === 'return' || action.type === 'return') && action.condition !== undefined) {
