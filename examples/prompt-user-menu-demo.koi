@@ -1,0 +1,24 @@
+// Demo: Prompt User with Interactive Menu
+// Shows how agents can ask users to choose from options with arrow keys
+
+package "prompt-user-menu-demo"
+
+role Worker { can execute }
+
+Agent Assistant : Worker {
+  llm default = { provider: "openai", model: "gpt-4o-mini" }
+
+  on start(args: Json) {
+    playbook """
+    Ask the user if they want to proceed with the operation.
+    Give them options: "Yes" and "No"
+
+    Then ask them to select their experience level with options:
+    "Beginner", "Intermediate", "Advanced"
+
+    Respond differently based on their choices.
+    """
+  }
+}
+
+run Assistant.start({})
