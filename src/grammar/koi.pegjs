@@ -504,6 +504,12 @@ ExpressionStatement
 
 Expression
   = AssignmentExpression
+  / ConditionalExpression
+
+ConditionalExpression
+  = test:LogicalOrExpression _ "?" _ consequent:Expression _ ":" _ alternate:Expression {
+      return { type: 'ConditionalExpression', test, consequent, alternate, location: location() };
+    }
   / LogicalOrExpression
 
 AssignmentExpression
