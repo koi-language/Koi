@@ -388,10 +388,12 @@ Statement
   = PlaybookStatement
   / VariableDeclaration
   / ConstDeclaration
+  / TryStatement
   / IfStatement
   / ForStatement
   / WhileStatement
   / ReturnStatement
+  / ThrowStatement
   / SendStatement
   / UsePlaybookStatement
   / ExpressionStatement
@@ -430,6 +432,23 @@ ElseClause
       return body;
     }
 
+TryStatement
+  = "try"i _ "{" _ body:Statement* _ "}" _ handler:CatchClause? _ finalizer:FinallyClause? _ &{
+      return !!(handler || finalizer);
+    } {
+      return { type: 'TryStatement', body, handler, finalizer, location: location() };
+    }
+
+CatchClause
+  = "catch"i _ "(" _ param:Identifier _ ")" _ "{" _ body:Statement* _ "}" {
+      return { type: 'CatchClause', param, body, location: location() };
+    }
+
+FinallyClause
+  = "finally"i _ "{" _ body:Statement* _ "}" {
+      return body;
+    }
+
 ForStatement
   = "for"i _ "(" _ decl:("const"i / "let"i / "var"i) _ id:Identifier _ "of"i _ expr:Expression _ ")" _ "{" _ body:Statement* _ "}" _ {
       return { type: 'ForOfStatement', declaration: decl, id, expression: expr, body, location: location() };
@@ -456,13 +475,18 @@ ReturnStatement
       return { type: 'ReturnStatement', value, location: location() };
     }
 
+ThrowStatement
+  = "throw"i _ value:Expression _ {
+      return { type: 'ThrowStatement', argument: value, location: location() };
+    }
+
 SendStatement
   = "await"i _ "send"i _ target:SendTarget _ args:CallArguments _ timeout:TimeoutClause? _ {
       return { type: 'SendStatement', target, arguments: args, timeout, location: location() };
     }
 
 SendTarget
-  = base:PostfixExpression filters:SendFilter* {
+  = base:PrimaryExpression filters:SendFilter* {
       return { base, filters, location: location() };
     }
 
@@ -537,7 +561,7 @@ EqualityExpression
     }
 
 RelationalExpression
-  = head:AdditiveExpression tail:(_ ("<=" / ">=" / "<" / ">") _ AdditiveExpression)* {
+  = head:AdditiveExpression tail:(_ ("<=" / ">=" / "<" / ">" / "instanceof"i) _ AdditiveExpression)* {
       return buildBinaryExpression(head, tail);
     }
 
@@ -943,6 +967,7 @@ ReservedWord
   = ("package" / "import" / "skill" / "role" / "can" / "Team" / "Agent" / "Skill" /
      "uses" / "llm" / "default" / "on" / "state" / "playbook" / "resilience" /
      "export" / "async" / "function" / "var" / "const" / "let" / "if" / "else" / "for" / "of" / "in" / "while" /
+     "try" / "catch" / "finally" / "throw" / "instanceof" /
      "return" / "await" / "send" / "timeout" / "use" / "run" /
      "override" / "affordance" / "true" / "false" / "null") !IdentifierPart
 
