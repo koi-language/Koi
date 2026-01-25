@@ -91,35 +91,32 @@ export class ImportResolver {
         // Recursively resolve imports in the imported file
         const resolvedImportedAst = await this.resolveImports(importedAst, resolvedPath);
 
-        // Extract all exportable declarations from imported file
-        for (const decl of resolvedImportedAst.declarations) {
+        // Extract ONLY locally-defined declarations from the imported file
+        // (not the ones it imported itself, which are already in resolvedImportedAst)
+        // Use the original importedAst to get local declarations only
+        const localDecls = importedAst.declarations.filter(d => d.type !== 'ImportDecl');
+
+        for (const decl of localDecls) {
+          // Add to global collections, avoiding duplicates
           if (decl.type === 'SkillDecl') {
             const existingSkill = this.importedSkills.find(s => s.name.name === decl.name.name);
             if (!existingSkill) {
               this.importedSkills.push(decl);
-            } else {
-              console.warn(`⚠️  Duplicate Skill "${decl.name.name}" found in ${importPath}, skipping`);
             }
           } else if (decl.type === 'AgentDecl') {
             const existingAgent = this.importedAgents.find(a => a.name.name === decl.name.name);
             if (!existingAgent) {
               this.importedAgents.push(decl);
-            } else {
-              console.warn(`⚠️  Duplicate Agent "${decl.name.name}" found in ${importPath}, skipping`);
             }
           } else if (decl.type === 'RoleDecl') {
             const existingRole = this.importedRoles.find(r => r.name.name === decl.name.name);
             if (!existingRole) {
               this.importedRoles.push(decl);
-            } else {
-              console.warn(`⚠️  Duplicate Role "${decl.name.name}" found in ${importPath}, skipping`);
             }
           } else if (decl.type === 'TeamDecl') {
             const existingTeam = this.importedTeams.find(t => t.name.name === decl.name.name);
             if (!existingTeam) {
               this.importedTeams.push(decl);
-            } else {
-              console.warn(`⚠️  Duplicate Team "${decl.name.name}" found in ${importPath}, skipping`);
             }
           }
         }

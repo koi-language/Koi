@@ -1324,17 +1324,48 @@ Execute this task and return the result as JSON.
   }
 
 
-  async callSkill(skillName, input) {
-    // Calling skill
-
+  async callSkill(skillName, functionNameOrInput, inputOrUndefined) {
     if (!this.skills.includes(skillName)) {
       throw new Error(`Agent ${this.name} does not have skill: ${skillName}`);
     }
 
-    // In a real implementation, this would look up and execute the skill
-    // For now, we'll simulate it
-    // Skill processing
-    return { success: true, skill: skillName, input };
+    // Support two calling conventions:
+    // 1. callSkill(skillName, functionName, input) - call specific function
+    // 2. callSkill(skillName, input) - legacy: find matching function by intent
+    let functionName, input;
+
+    if (inputOrUndefined !== undefined) {
+      // Convention 1: explicit function name
+      functionName = functionNameOrInput;
+      input = inputOrUndefined;
+    } else {
+      // Convention 2: auto-select function (legacy)
+      input = functionNameOrInput;
+
+      // Try to find a matching function using skill selector
+      // For now, we'll just use the first available function
+      const skillFunctions = globalThis.SkillRegistry?.getAll(skillName);
+      if (!skillFunctions || Object.keys(skillFunctions).length === 0) {
+        throw new Error(`No functions found in skill: ${skillName}`);
+      }
+
+      functionName = Object.keys(skillFunctions)[0];
+    }
+
+    // Get the function from SkillRegistry
+    const skillFunction = globalThis.SkillRegistry?.get(skillName, functionName);
+
+    if (!skillFunction) {
+      throw new Error(`Function ${functionName} not found in skill ${skillName}`);
+    }
+
+    // Execute the skill function
+    try {
+      const result = await skillFunction.fn(input);
+      return result;
+    } catch (error) {
+      throw new Error(`Skill ${skillName}.${functionName} failed: ${error.message}`);
+    }
   }
 
   /**

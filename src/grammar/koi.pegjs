@@ -218,11 +218,13 @@ ResilienceProp
 
 SkillDecl
   = "Skill"i _ name:Identifier _ "{" _ body:SkillBody _ "}" _ {
-      // Extract affordance, functions, agents, teams from body
+      // Extract affordance, functions, agents, teams, constants, variables from body
       const affordance = body.find(item => item.type === 'AffordanceDecl');
       const functions = body.filter(item => item.type === 'ExportFunction');
       const agents = body.filter(item => item.type === 'AgentDecl');
       const teams = body.filter(item => item.type === 'TeamDecl');
+      const constants = body.filter(item => item.type === 'SkillConstDeclaration');
+      const variables = body.filter(item => item.type === 'SkillVariableDeclaration');
 
       return {
         type: 'SkillDecl',
@@ -231,6 +233,8 @@ SkillDecl
         functions,
         agents,
         teams,
+        constants,
+        variables,
         location: location()
       };
     }
@@ -244,11 +248,112 @@ SkillBodyItem
   = AffordanceDecl
   / AgentDecl
   / TeamDecl
+  / SkillConstDeclaration
+  / SkillVariableDeclaration
   / ExportFunction
+  / NonExportFunction
 
 AffordanceDecl
   = "affordance"i _ content:StringLiteral _ {
       return { type: 'AffordanceDecl', content, location: location() };
+    }
+
+SkillConstDeclaration
+  = "const"i _ pattern:DestructuringPattern _ typeAnnotation:(":" _ TypeAnnotation)? _ "=" _ value:Expression _ {
+      return {
+        type: 'SkillConstDeclaration',
+        pattern,
+        typeAnnotation: typeAnnotation ? typeAnnotation[2] : null,
+        value,
+        location: location()
+      };
+    }
+  / "const"i _ name:Identifier _ typeAnnotation:(":" _ TypeAnnotation)? _ "=" _ value:Expression _ {
+      return {
+        type: 'SkillConstDeclaration',
+        pattern: { type: 'Identifier', name: name.name },
+        typeAnnotation: typeAnnotation ? typeAnnotation[2] : null,
+        value,
+        location: location()
+      };
+    }
+
+SkillVariableDeclaration
+  = "let"i _ pattern:DestructuringPattern _ typeAnnotation:(":" _ TypeAnnotation)? _ init:("=" _ Expression)? _ {
+      return {
+        type: 'SkillVariableDeclaration',
+        pattern,
+        typeAnnotation: typeAnnotation ? typeAnnotation[2] : null,
+        init: init ? init[2] : null,
+        location: location()
+      };
+    }
+  / "let"i _ name:Identifier _ typeAnnotation:(":" _ TypeAnnotation)? _ init:("=" _ Expression)? _ {
+      return {
+        type: 'SkillVariableDeclaration',
+        pattern: { type: 'Identifier', name: name.name },
+        typeAnnotation: typeAnnotation ? typeAnnotation[2] : null,
+        init: init ? init[2] : null,
+        location: location()
+      };
+    }
+
+DestructuringPattern
+  = ObjectDestructuringPattern
+  / ArrayDestructuringPattern
+
+ObjectDestructuringPattern
+  = "{" _ props:DestructuringPropertyList _ "}" {
+      return { type: 'ObjectPattern', properties: props };
+    }
+
+DestructuringPropertyList
+  = head:DestructuringProperty tail:(_ "," _ DestructuringProperty)* {
+      return [head, ...tail.map(t => t[3])];
+    }
+
+DestructuringProperty
+  = key:Identifier _ ":" _ value:Identifier {
+      return { key: key.name, value: value.name };
+    }
+  / name:Identifier {
+      return { key: name.name, value: name.name };
+    }
+
+ArrayDestructuringPattern
+  = "[" _ elements:DestructuringElementList _ "]" {
+      return { type: 'ArrayPattern', elements };
+    }
+
+DestructuringElementList
+  = head:Identifier tail:(_ "," _ Identifier)* {
+      return [head.name, ...tail.map(t => t[3].name)];
+    }
+
+NonExportFunction
+  = isAsync:("async"i _)? "function"i _ name:Identifier _ "(" _ params:Parameters? _ ")" _ ":" _ returnType:TypeAnnotation _ "{" body:FunctionBody "}" _ {
+      return {
+        type: 'ExportFunction',
+        name,
+        isExport: false,
+        isAsync: !!isAsync,
+        params: params || [],
+        returnType,
+        body: { code: body },
+        location: location()
+      };
+    }
+  / isAsync:("async"i _)? "function"i _ name:Identifier _ "(" _ params:Parameters? _ ")" _ "{" body:FunctionBody "}" _ {
+      return {
+        type: 'ExportFunction',
+        name,
+        isExport: false,
+        isAsync: !!isAsync,
+        params: params || [],
+        returnType: null,
+        body: { code: body },
+        location: location()
+      };
     }
 
 ExportFunction
@@ -362,16 +467,16 @@ SendTarget
     }
 
 SendFilter
-  = "." "event"i "(" _ name:StringLiteral _ ")" {
+  = _ "." "event"i "(" _ name:StringLiteral _ ")" {
       return { type: 'EventFilter', event: name, location: location() };
     }
-  / "." "role"i "(" _ role:Identifier _ ")" {
+  / _ "." "role"i "(" _ role:Identifier _ ")" {
       return { type: 'RoleFilter', role, location: location() };
     }
-  / "." "any"i "(" _ ")" {
+  / _ "." "any"i "(" _ ")" {
       return { type: 'SelectionFilter', mode: 'any', location: location() };
     }
-  / "." "all"i "(" _ ")" {
+  / _ "." "all"i "(" _ ")" {
       return { type: 'SelectionFilter', mode: 'all', location: location() };
     }
 
@@ -402,9 +507,13 @@ Expression
   / LogicalOrExpression
 
 AssignmentExpression
-  = left:Identifier _ op:("=" / "+=" / "-=" / "*=" / "/=" / "%=") _ right:Expression {
+  = left:AssignmentTarget _ op:("=" / "+=" / "-=" / "*=" / "/=" / "%=") _ right:Expression {
       return { type: 'AssignmentExpression', operator: op, left, right, location: location() };
     }
+
+AssignmentTarget
+  = ChainedExpression
+  / Identifier
 
 LogicalOrExpression
   = head:LogicalAndExpression tail:(_ ("||") _ LogicalAndExpression)* {
@@ -480,23 +589,32 @@ ChainedExpression
   = base:PrimaryExpression chain:ChainElement+ {
       return chain.reduce((obj, element) => {
         if (element.type === 'call') {
-          return { type: 'CallExpression', callee: obj, arguments: element.args, location: location() };
+          return { type: 'CallExpression', callee: obj, arguments: element.args, optional: element.optional, location: location() };
         } else if (element.type === 'member') {
-          return { type: 'MemberExpression', object: obj, property: element.property, computed: element.computed, location: location() };
+          return { type: 'MemberExpression', object: obj, property: element.property, computed: element.computed, optional: element.optional, location: location() };
         }
         return obj;
       }, base);
     }
 
 ChainElement
-  = "." _ prop:Identifier {
-      return { type: 'member', property: prop, computed: false };
+  = "?." _ prop:PropertyIdentifier {
+      return { type: 'member', property: prop, computed: false, optional: true };
+    }
+  / "." _ prop:PropertyIdentifier {
+      return { type: 'member', property: prop, computed: false, optional: false };
+    }
+  / "?.[" _ prop:Expression _ "]" {
+      return { type: 'member', property: prop, computed: true, optional: true };
     }
   / "[" _ prop:Expression _ "]" {
-      return { type: 'member', property: prop, computed: true };
+      return { type: 'member', property: prop, computed: false, optional: false };
+    }
+  / "?." _ args:CallArguments {
+      return { type: 'call', args, optional: true };
     }
   / args:CallArguments {
-      return { type: 'call', args };
+      return { type: 'call', args, optional: false };
     }
 
 CallArguments
@@ -546,11 +664,11 @@ AwaitExpression
     }
 
 ArrowFunction
-  = "(" _ params:ParameterList? _ ")" _ "=>" _ body:ArrowBody {
-      return { type: 'ArrowFunction', params: params || [], body, location: location() };
+  = isAsync:("async"i _)? "(" _ params:ParameterList? _ ")" _ "=>" _ body:ArrowBody {
+      return { type: 'ArrowFunction', params: params || [], body, isAsync: !!isAsync, location: location() };
     }
-  / param:Identifier _ "=>" _ body:ArrowBody {
-      return { type: 'ArrowFunction', params: [param], body, location: location() };
+  / isAsync:("async"i _)? param:Identifier _ "=>" _ body:ArrowBody {
+      return { type: 'ArrowFunction', params: [param], body, isAsync: !!isAsync, location: location() };
     }
 
 ParameterList
@@ -574,6 +692,7 @@ Literal
   = MCPAddress
   / TemplateLiteral
   / StringLiteral
+  / RegexLiteral
   / NumberLiteral
   / BooleanLiteral
   / NullLiteral
@@ -624,6 +743,21 @@ DoubleStringChar
 SingleStringChar
   = !("'" / "\\") char:. { return char; }
   / "\\" seq:EscapeSequence { return seq; }
+
+RegexLiteral
+  = "/" pattern:RegexPattern "/" flags:RegexFlags? {
+      return { type: 'RegexLiteral', pattern, flags: flags || '', location: location() };
+    }
+
+RegexPattern
+  = chars:RegexChar* { return chars.join(''); }
+
+RegexChar
+  = "\\" char:. { return "\\" + char; }  // Escaped character (including \/)
+  / ![/\n\r] char:. { return char; }      // Any character except / and newlines
+
+RegexFlags
+  = flags:$[gimsuvy]+ { return flags; }
 
 EscapeSequence
   = "n" { return "\n"; }
@@ -693,13 +827,66 @@ ArrayLiteral
 // ============================================================
 
 TypeAnnotation
-  = "Int"i { return { type: 'TypeAnnotation', name: 'Int', location: location() }; }
-  / "String"i { return { type: 'TypeAnnotation', name: 'String', location: location() }; }
-  / "Bool"i { return { type: 'TypeAnnotation', name: 'Bool', location: location() }; }
-  / "Json"i { return { type: 'TypeAnnotation', name: 'Json', location: location() }; }
-  / "Promise"i _ "<" _ inner:TypeAnnotation _ ">" {
+  = UnionType
+  / PostfixType
+
+UnionType
+  = head:PostfixType tail:(_ "|" _ PostfixType)+ {
+      return { type: 'UnionType', types: [head, ...tail.map(t => t[3])], location: location() };
+    }
+
+PostfixType
+  = base:PrimaryType suffixes:(_ "[" _ "]")+ {
+      // Apply array type for each []
+      return suffixes.reduce((type) => {
+        return { type: 'ArrayTypeAnnotation', elementType: type, location: location() };
+      }, base);
+    }
+  / PrimaryType
+
+PrimaryType
+  = PromiseType
+  / ArrayTypeAnnotation
+  / ObjectTypeAnnotation
+  / PrimitiveType
+
+ObjectTypeAnnotation
+  = "{" _ props:TypePropertyList _ "}" {
+      return { type: 'ObjectTypeAnnotation', properties: props, location: location() };
+    }
+
+TypePropertyList
+  = head:TypeProperty tail:(_ "," _ TypeProperty)* _ ","? {
+      return [head, ...tail.map(t => t[3])];
+    }
+
+TypeProperty
+  = name:PropertyIdentifier _ optional:"?"? _ ":" _ type:TypeAnnotation {
+      return { name: name.name, type, optional: !!optional };
+    }
+
+ArrayTypeAnnotation
+  = "Array"i _ "<" _ elem:TypeAnnotation _ ">" {
+      return { type: 'ArrayTypeAnnotation', elementType: elem, location: location() };
+    }
+
+PromiseType
+  = "Promise"i _ "<" _ inner:TypeAnnotation _ ">" {
       return { type: 'TypeAnnotation', name: 'Promise', inner, location: location() };
     }
+
+PrimitiveType
+  = "boolean"i !IdentifierPart { return { type: 'BooleanType', location: location() }; }
+  / "number"i !IdentifierPart { return { type: 'NumberType', location: location() }; }
+  / "string"i !IdentifierPart { return { type: 'StringType', location: location() }; }
+  / "void"i !IdentifierPart { return { type: 'VoidType', location: location() }; }
+  / "any"i !IdentifierPart { return { type: 'AnyType', location: location() }; }
+  / "null"i !IdentifierPart { return { type: 'NullType', location: location() }; }
+  / "undefined"i !IdentifierPart { return { type: 'UndefinedType', location: location() }; }
+  / "Int"i !IdentifierPart { return { type: 'TypeAnnotation', name: 'Int', location: location() }; }
+  / "String"i !IdentifierPart { return { type: 'TypeAnnotation', name: 'String', location: location() }; }
+  / "Bool"i !IdentifierPart { return { type: 'TypeAnnotation', name: 'Bool', location: location() }; }
+  / "Json"i !IdentifierPart { return { type: 'TypeAnnotation', name: 'Json', location: location() }; }
   / name:Identifier {
       return { type: 'TypeAnnotation', name: name.name, location: location() };
     }
@@ -714,8 +901,11 @@ Parameters
     }
 
 Parameter
-  = name:Identifier _ ":" _ type:TypeAnnotation {
-      return { name, type, location: location() };
+  = name:Identifier _ ":" _ type:TypeAnnotation _ defaultValue:("=" _ Expression)? {
+      return { name, type, default: defaultValue ? defaultValue[2] : null, location: location() };
+    }
+  / name:Identifier {
+      return { name, type: null, default: null, location: location() };
     }
 
 // ============================================================
@@ -733,6 +923,13 @@ RunStatement
 
 Identifier
   = !ReservedWord name:$([a-zA-Z_][a-zA-Z0-9_]*) {
+      return { type: 'Identifier', name, location: location() };
+    }
+
+// PropertyIdentifier: allows reserved words as property names (after .)
+// Examples: obj.state, obj.default, this.state
+PropertyIdentifier
+  = name:$([a-zA-Z_][a-zA-Z0-9_]*) {
       return { type: 'Identifier', name, location: location() };
     }
 

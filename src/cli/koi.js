@@ -347,7 +347,7 @@ async function compileFile(sourcePath, outputPath = null, options = {}) {
     }
 
     const basename = path.basename(sourcePath, '.koi');
-    outputPath = path.join(buildDir, basename + '.js');
+    outputPath = path.join(buildDir, basename + '.ts');
   }
 
   // Transpile with output path so it can calculate correct runtime import path
@@ -422,9 +422,10 @@ async function runFile(sourcePath, options = {}) {
     env.KOI_DEBUG_LLM = '1';
   }
 
-  const child = spawn('node', [jsPath], {
+  const child = spawn('npx', ['tsx', jsPath], {
     stdio: 'inherit',
-    env
+    env,
+    shell: true
   });
 
   return new Promise((resolve, reject) => {
