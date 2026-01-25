@@ -3,12 +3,13 @@
  */
 
 import readline from 'readline';
+import prompts from 'prompts';
 import { cliLogger } from '../cli-logger.js';
 
 export default {
   type: 'prompt_user',
   intent: 'prompt_user',
-  description: 'Ask the user a question via command line and get their text response → Returns: { answer }. Access the user\'s input with ${id.output.answer}',
+  description: 'Ask the user a question via command line and get their text response. If options are provided, shows an interactive menu with arrow key navigation → Returns: { answer }. Access with ${id.output.answer}',
   permission: 'execute', // Requires execute permission
 
   schema: {
@@ -18,9 +19,13 @@ export default {
         type: 'string',
         description: 'The question to ask the user'
       },
+      options: {
+        type: 'array',
+        description: 'Optional array of choices for interactive menu (e.g., ["Yes", "No"]). User navigates with arrows and selects with Enter.'
+      },
       prompt: {
         type: 'string',
-        description: 'Optional custom prompt (defaults to "> ")'
+        description: 'Optional custom prompt for text input mode (defaults to "> ")'
       }
     },
     required: ['question']
@@ -29,13 +34,14 @@ export default {
   examples: [
     { id: 'a1', intent: 'prompt_user', question: 'What is your name?' },
     { intent: 'print', message: 'Hello ${a1.output.answer}!' },
-    { id: 'a2', intent: 'prompt_user', question: 'What is your age?' },
-    { intent: 'print', message: 'You are ${a2.output.answer} years old' }
+    { id: 'a2', intent: 'prompt_user', question: 'Do you want to proceed?', options: ['Yes', 'No'] },
+    { intent: 'print', message: 'You selected: ${a2.output.answer}' }
   ],
 
   // Executor function - receives the action and agent context
   async execute(action, agent) {
     const question = action.question || action.data?.question || '';
+    const options = action.options || action.data?.options || null;
     const promptText = action.prompt || action.data?.prompt || '> ';
 
     if (!question) {
@@ -45,7 +51,24 @@ export default {
     // Clear any progress indicators
     cliLogger.clearProgress();
 
-    // Create readline interface
+    // If options are provided, show interactive menu
+    if (options && Array.isArray(options) && options.length > 0) {
+      const response = await prompts({
+        type: 'select',
+        name: 'value',
+        message: question,
+        choices: options.map((opt, idx) => ({
+          title: opt,
+          value: opt
+        })),
+        initial: 0
+      });
+
+      // Return the selected option
+      return { answer: response.value || options[0] };
+    }
+
+    // Otherwise, use text input mode
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout

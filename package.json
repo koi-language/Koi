@@ -64,6 +64,7 @@
     "node-fetch": "^3.3.2",
     "openai": "^6.16.0",
     "peggy": "^5.0.6",
+    "prompts": "^2.4.2",
     "source-map": "^0.7.6",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
