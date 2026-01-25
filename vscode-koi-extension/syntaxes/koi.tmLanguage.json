@@ -22,11 +22,8 @@
   ],
   "repository": {
     "import-declaration": {
-      "match": "\\b(import)\\s+([\"'][^\"']+[\"'])",
-      "captures": {
-        "1": { "name": "keyword.control.import.koi" },
-        "2": { "name": "string.quoted.double.koi" }
-      }
+      "match": "\\b(import)(?=\\s+[\"'](?!\"\"))",
+      "name": "keyword.control.import.koi"
     },
     "comments": {
       "patterns": [
@@ -43,11 +40,8 @@
       ]
     },
     "package-declaration": {
-      "match": "\\b(package)\\s+([\"'][^\"']+[\"'])",
-      "captures": {
-        "1": { "name": "keyword.control.package.koi" },
-        "2": { "name": "string.quoted.double.koi" }
-      }
+      "match": "\\b(package)(?=\\s+[\"'](?!\"\"))",
+      "name": "keyword.control.package.koi"
     },
     "role-declaration": {
       "begin": "\\b(role)\\s+(\\w+)\\s*\\{",
