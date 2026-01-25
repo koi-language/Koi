@@ -287,6 +287,68 @@ CRITICAL RULES:
    - The caller can access individual users with \${actionId.output.users[0].value.name}
    - Only use format when explicitly asked to display/print formatted output
 
+14. PROMPT_USER WITH OPTIONS - CRITICAL: Detect when questions have limited/boolean answers:
+   - ALWAYS analyze the question context to determine if it's boolean or has limited options
+   - Questions like "quiere continuar", "do you want", "yes or no", "acepta" → Use options: ["Sí", "No"] or ["Yes", "No"]
+   - Questions with 2-3 obvious choices → Use options array for interactive menu with arrow keys
+   - Questions asking for open text (name, age, description) → NO options (text input mode)
+
+   CRITICAL DETECTION RULES:
+   - Keywords that indicate boolean: "quiere", "desea", "acepta", "want", "do you", "would you", "continuar"
+   - Questions with "o" / "or" indicating choices: "norte o sur", "male or female" → Extract options
+   - Questions asking about preferences with limited set: "color favorito" → ["Rojo", "Azul", "Verde", "Amarillo"]
+   - Geographic binaries: "norte o sur", "north or south" → ["Norte", "Sur"]
+
+   EXAMPLES:
+   ❌ WRONG - Boolean question without options:
+   { "intent": "prompt_user", "question": "¿Quieres continuar?" }  ← Missing options!
+
+   ✅ RIGHT - Boolean with options:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] }
+
+   ❌ WRONG - Limited choices without options:
+   { "intent": "prompt_user", "question": "¿Eres del norte o del sur?" }  ← Missing options!
+
+   ✅ RIGHT - Limited choices with options:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Eres del norte o del sur?", "options": ["Norte", "Sur"] }
+
+   ✅ RIGHT - Open text (no options):
+   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" }  ← Text input OK
+   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }  ← Text input OK
+
+15. IF ACTION FOR CONDITIONAL LOGIC - CRITICAL: Use "if" action when execution depends on user choices:
+   - NEVER generate all actions upfront when some depend on conditions
+   - Use "if" action to branch based on runtime values (especially prompt_user responses)
+
+   STRUCTURE:
+   {
+     "intent": "if",
+     "condition": "\${actionId.output.answer} === 'expected value'",
+     "then": [ array of actions to execute if true ],
+     "else": [ array of actions to execute if false ]
+   }
+
+   EXAMPLES:
+   Prompt: "Ask if user wants to continue, if yes ask their age, if no say goodbye"
+
+   ✅ RIGHT - Using if action:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "intent": "if",
+     "condition": "\${a1.output.answer} === 'Sí'",
+     "then": [
+       { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
+       { "intent": "print", "message": "Tienes \${a2.output.answer} años" }
+     ],
+     "else": [
+       { "intent": "print", "message": "¡Hasta luego!" }
+     ]
+   }
+
+   ❌ WRONG - Generating all actions without conditional:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },  ← Always asks!
+   { "intent": "print", "message": "..." }
+
 ${delegationNote}${teamDelegationNote}
 
 RESPONSE FORMAT (ALWAYS use this):
@@ -704,6 +766,68 @@ CRITICAL RULES:
    - For lists: { "id": "aX", "intent": "format", "data": "\${arrayId.output.items}", "instruction": "Format each item as: - {name}: {description}" }
    - Then print: { "intent": "print", "message": "\${aX.output.formatted}" }
 
+10. PROMPT_USER WITH OPTIONS - CRITICAL: Detect when questions have limited/boolean answers:
+   - ALWAYS analyze the question context to determine if it's boolean or has limited options
+   - Questions like "quiere continuar", "do you want", "yes or no", "acepta" → Use options: ["Sí", "No"] or ["Yes", "No"]
+   - Questions with 2-3 obvious choices → Use options array for interactive menu with arrow keys
+   - Questions asking for open text (name, age, description) → NO options (text input mode)
+
+   CRITICAL DETECTION RULES:
+   - Keywords that indicate boolean: "quiere", "desea", "acepta", "want", "do you", "would you", "continuar"
+   - Questions with "o" / "or" indicating choices: "norte o sur", "male or female" → Extract options
+   - Questions asking about preferences with limited set: "color favorito" → ["Rojo", "Azul", "Verde", "Amarillo"]
+   - Geographic binaries: "norte o sur", "north or south" → ["Norte", "Sur"]
+
+   EXAMPLES:
+   ❌ WRONG - Boolean question without options:
+   { "intent": "prompt_user", "question": "¿Quieres continuar?" }  ← Missing options!
+
+   ✅ RIGHT - Boolean with options:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] }
+
+   ❌ WRONG - Limited choices without options:
+   { "intent": "prompt_user", "question": "¿Eres del norte o del sur?" }  ← Missing options!
+
+   ✅ RIGHT - Limited choices with options:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Eres del norte o del sur?", "options": ["Norte", "Sur"] }
+
+   ✅ RIGHT - Open text (no options):
+   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" }  ← Text input OK
+   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }  ← Text input OK
+
+11. IF ACTION FOR CONDITIONAL LOGIC - CRITICAL: Use "if" action when execution depends on user choices:
+   - NEVER generate all actions upfront when some depend on conditions
+   - Use "if" action to branch based on runtime values (especially prompt_user responses)
+
+   STRUCTURE:
+   {
+     "intent": "if",
+     "condition": "\${actionId.output.answer} === 'expected value'",
+     "then": [ array of actions to execute if true ],
+     "else": [ array of actions to execute if false ]
+   }
+
+   EXAMPLES:
+   Prompt: "Ask if user wants to continue, if yes ask their age, if no say goodbye"
+
+   ✅ RIGHT - Using if action:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "intent": "if",
+     "condition": "\${a1.output.answer} === 'Sí'",
+     "then": [
+       { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
+       { "intent": "print", "message": "Tienes \${a2.output.answer} años" }
+     ],
+     "else": [
+       { "intent": "print", "message": "¡Hasta luego!" }
+     ]
+   }
+
+   ❌ WRONG - Generating all actions without conditional:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },  ← Always asks!
+   { "intent": "print", "message": "..." }
+
 RESPONSE FORMAT (ALWAYS use this):
 {
   "actions": [
@@ -862,6 +986,68 @@ CRITICAL RULES:
    - For markdown tables: { "id": "aX", "intent": "format", "data": "\${arrayId.output.users}", "instruction": "Generate markdown table with columns: Sr/Sra (deduce from name), Name, Age. Include header row with | Sr/Sra | Name | Age | and separator |--------|------|-----|" }
    - For lists: { "id": "aX", "intent": "format", "data": "\${arrayId.output.items}", "instruction": "Format each item as: - {name}: {description}" }
    - Then print: { "intent": "print", "message": "\${aX.output.formatted}" }
+
+10. PROMPT_USER WITH OPTIONS - CRITICAL: Detect when questions have limited/boolean answers:
+   - ALWAYS analyze the question context to determine if it's boolean or has limited options
+   - Questions like "quiere continuar", "do you want", "yes or no", "acepta" → Use options: ["Sí", "No"] or ["Yes", "No"]
+   - Questions with 2-3 obvious choices → Use options array for interactive menu with arrow keys
+   - Questions asking for open text (name, age, description) → NO options (text input mode)
+
+   CRITICAL DETECTION RULES:
+   - Keywords that indicate boolean: "quiere", "desea", "acepta", "want", "do you", "would you", "continuar"
+   - Questions with "o" / "or" indicating choices: "norte o sur", "male or female" → Extract options
+   - Questions asking about preferences with limited set: "color favorito" → ["Rojo", "Azul", "Verde", "Amarillo"]
+   - Geographic binaries: "norte o sur", "north or south" → ["Norte", "Sur"]
+
+   EXAMPLES:
+   ❌ WRONG - Boolean question without options:
+   { "intent": "prompt_user", "question": "¿Quieres continuar?" }  ← Missing options!
+
+   ✅ RIGHT - Boolean with options:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] }
+
+   ❌ WRONG - Limited choices without options:
+   { "intent": "prompt_user", "question": "¿Eres del norte o del sur?" }  ← Missing options!
+
+   ✅ RIGHT - Limited choices with options:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Eres del norte o del sur?", "options": ["Norte", "Sur"] }
+
+   ✅ RIGHT - Open text (no options):
+   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" }  ← Text input OK
+   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }  ← Text input OK
+
+11. IF ACTION FOR CONDITIONAL LOGIC - CRITICAL: Use "if" action when execution depends on user choices:
+   - NEVER generate all actions upfront when some depend on conditions
+   - Use "if" action to branch based on runtime values (especially prompt_user responses)
+
+   STRUCTURE:
+   {
+     "intent": "if",
+     "condition": "\${actionId.output.answer} === 'expected value'",
+     "then": [ array of actions to execute if true ],
+     "else": [ array of actions to execute if false ]
+   }
+
+   EXAMPLES:
+   Prompt: "Ask if user wants to continue, if yes ask their age, if no say goodbye"
+
+   ✅ RIGHT - Using if action:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "intent": "if",
+     "condition": "\${a1.output.answer} === 'Sí'",
+     "then": [
+       { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
+       { "intent": "print", "message": "Tienes \${a2.output.answer} años" }
+     ],
+     "else": [
+       { "intent": "print", "message": "¡Hasta luego!" }
+     ]
+   }
+
+   ❌ WRONG - Generating all actions without conditional:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },  ← Always asks!
+   { "intent": "print", "message": "..." }
 
 RESPONSE FORMAT (ALWAYS use this):
 {
@@ -1163,6 +1349,68 @@ CRITICAL RULES:
    - For markdown tables: { "id": "aX", "intent": "format", "data": "\${arrayId.output.users}", "instruction": "Generate markdown table with columns: Sr/Sra (deduce from name), Name, Age. Include header row with | Sr/Sra | Name | Age | and separator |--------|------|-----|" }
    - For lists: { "id": "aX", "intent": "format", "data": "\${arrayId.output.items}", "instruction": "Format each item as: - {name}: {description}" }
    - Then print: { "intent": "print", "message": "\${aX.output.formatted}" }
+
+10. PROMPT_USER WITH OPTIONS - CRITICAL: Detect when questions have limited/boolean answers:
+   - ALWAYS analyze the question context to determine if it's boolean or has limited options
+   - Questions like "quiere continuar", "do you want", "yes or no", "acepta" → Use options: ["Sí", "No"] or ["Yes", "No"]
+   - Questions with 2-3 obvious choices → Use options array for interactive menu with arrow keys
+   - Questions asking for open text (name, age, description) → NO options (text input mode)
+
+   CRITICAL DETECTION RULES:
+   - Keywords that indicate boolean: "quiere", "desea", "acepta", "want", "do you", "would you", "continuar"
+   - Questions with "o" / "or" indicating choices: "norte o sur", "male or female" → Extract options
+   - Questions asking about preferences with limited set: "color favorito" → ["Rojo", "Azul", "Verde", "Amarillo"]
+   - Geographic binaries: "norte o sur", "north or south" → ["Norte", "Sur"]
+
+   EXAMPLES:
+   ❌ WRONG - Boolean question without options:
+   { "intent": "prompt_user", "question": "¿Quieres continuar?" }  ← Missing options!
+
+   ✅ RIGHT - Boolean with options:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] }
+
+   ❌ WRONG - Limited choices without options:
+   { "intent": "prompt_user", "question": "¿Eres del norte o del sur?" }  ← Missing options!
+
+   ✅ RIGHT - Limited choices with options:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Eres del norte o del sur?", "options": ["Norte", "Sur"] }
+
+   ✅ RIGHT - Open text (no options):
+   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" }  ← Text input OK
+   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }  ← Text input OK
+
+11. IF ACTION FOR CONDITIONAL LOGIC - CRITICAL: Use "if" action when execution depends on user choices:
+   - NEVER generate all actions upfront when some depend on conditions
+   - Use "if" action to branch based on runtime values (especially prompt_user responses)
+
+   STRUCTURE:
+   {
+     "intent": "if",
+     "condition": "\${actionId.output.answer} === 'expected value'",
+     "then": [ array of actions to execute if true ],
+     "else": [ array of actions to execute if false ]
+   }
+
+   EXAMPLES:
+   Prompt: "Ask if user wants to continue, if yes ask their age, if no say goodbye"
+
+   ✅ RIGHT - Using if action:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "intent": "if",
+     "condition": "\${a1.output.answer} === 'Sí'",
+     "then": [
+       { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
+       { "intent": "print", "message": "Tienes \${a2.output.answer} años" }
+     ],
+     "else": [
+       { "intent": "print", "message": "¡Hasta luego!" }
+     ]
+   }
+
+   ❌ WRONG - Generating all actions without conditional:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },  ← Always asks!
+   { "intent": "print", "message": "..." }
 
 RESPONSE FORMAT (ALWAYS use this):
 {
