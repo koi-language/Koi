@@ -63,15 +63,11 @@ export default {
       results: []
     };
 
-    // Resolve condition using agent's resolveObjectReferences
-    // This properly handles ${a1.output.answer} template variables
-    const resolvedCondition = agent.resolveObjectReferences(condition, context);
-
-    // Evaluate condition using agent's evaluateCondition method
-    // This properly handles boolean expressions with context
+    // Evaluate condition directly using agent's evaluateCondition method
+    // This properly handles template variables and quotes strings correctly
     let conditionResult = false;
     try {
-      conditionResult = agent.evaluateCondition(resolvedCondition, context);
+      conditionResult = agent.evaluateCondition(condition, context);
     } catch (error) {
       throw new Error(`Failed to evaluate condition "${condition}": ${error.message}`);
     }

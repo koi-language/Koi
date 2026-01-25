@@ -779,8 +779,15 @@ export class Agent {
           const evalContext = { ...this.buildEvalContext(context), ...context };
           const fn = new Function(...Object.keys(evalContext), `return ${expr};`);
           const result = fn(...Object.values(evalContext));
-          // Convert to string for template interpolation
-          return typeof result === 'object' ? JSON.stringify(result) : String(result);
+          // Convert to proper JavaScript literal for condition evaluation
+          if (typeof result === 'string') {
+            // Quote strings properly to avoid "undefined variable" errors
+            return `'${result.replace(/'/g, "\\'")}'`;
+          } else if (typeof result === 'object') {
+            return JSON.stringify(result);
+          } else {
+            return String(result);
+          }
         } catch (error) {
           console.warn(`[Agent:${this.name}] Failed to evaluate condition sub-expression "${expr}": ${error.message}`);
           return match;
