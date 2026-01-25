@@ -790,17 +790,27 @@ CRITICAL RULES:
       - ❌ ABSOLUTELY WRONG: print with "\${2023 - new Date(birthdate).getFullYear()}"
       - ✅ RIGHT: { "id": "formatted", "intent": "format", "data": "\${usersArray}", "instruction": "Calculate age from birthdate..." }
 
-   B) CREATIVE/ADAPTIVE CONTENT - If playbook requests content that must adapt to data values:
-      - DETECT keywords: "bromea", "joke", "personaliza", "personalize", "comenta", "comment", "genera", "generate", "apropiado", "appropriate"
-      - If text should be DIFFERENT based on data (e.g., different joke for age 20 vs age 80), use format action
-      - NEVER hardcode creative content during planning - generate it at runtime based on actual data
+   B) DYNAMIC VS STATIC CONTENT - CRITICAL DECISION:
+      Ask yourself: "Does this content need to ANALYZE/INTERPRET the variable value to decide what to say?"
 
-      ❌ WRONG - Static creative content (same joke for any age):
+      → Just INSERTING a variable? Use print: { "intent": "print", "message": "Tu nombre es \${name}" }
+      → Need to ANALYZE the value? MANDATORY use format: { "intent": "format", "data": {...}, "instruction": "..." }
+
+      Content is DYNAMIC (MUST use format) when:
+      - Playbook says "bromea/joke", "personaliza/personalize", "comenta/comment", "genera/generate", "apropiado/appropriate"
+      - Content should VARY based on the value (different for 20 vs 80)
+      - Requires interpretation/analysis of the value to decide what to say
+
+      ❌ ABSOLUTELY WRONG - Hardcoding analyzed content (same message for ALL values):
+      Playbook: "bromea sobre su edad"
       { "intent": "print", "message": "Tienes \${a3.output.answer} años, ¡no te preocupes, la edad es solo un número!" }
+      ↑ WRONG: Same joke for age 20, 50, and 80 - NOT analyzing the value!
 
-      ✅ RIGHT - Dynamic creative content (adapts to actual age):
-      { "id": "a4", "intent": "format", "data": { "nombre": "\${a1.output.answer}", "edad": "\${a3.output.answer}" }, "instruction": "Genera un saludo personalizado para {nombre} y una broma creativa sobre tener {edad} años. La broma debe ser apropiada y diferente según la edad específica." },
+      ✅ CORRECT - Analyze value to generate appropriate content:
+      Playbook: "bromea sobre su edad"
+      { "id": "a4", "intent": "format", "data": { "nombre": "\${a1.output.answer}", "edad": "\${a3.output.answer}" }, "instruction": "Genera un saludo para {nombre} y una broma sobre {edad} años. La broma DEBE variar según la edad: diferente para joven (20), adulto (40), mayor (70)." },
       { "intent": "print", "message": "\${a4.output.formatted}" }
+      ↑ CORRECT: Will generate different jokes for different ages!
 
    C) COMPLEX TEMPLATES - Copy COMPLETE template from playbook to format instruction:
       - Keep ALL conditional logic (e.g., "Estimado o Estimada si es chica, deducelo por el nombre")
@@ -1060,17 +1070,27 @@ CRITICAL RULES:
       - ❌ ABSOLUTELY WRONG: print with "\${2023 - new Date(birthdate).getFullYear()}"
       - ✅ RIGHT: { "id": "formatted", "intent": "format", "data": "\${usersArray}", "instruction": "Calculate age from birthdate..." }
 
-   B) CREATIVE/ADAPTIVE CONTENT - If playbook requests content that must adapt to data values:
-      - DETECT keywords: "bromea", "joke", "personaliza", "personalize", "comenta", "comment", "genera", "generate", "apropiado", "appropriate"
-      - If text should be DIFFERENT based on data (e.g., different joke for age 20 vs age 80), use format action
-      - NEVER hardcode creative content during planning - generate it at runtime based on actual data
+   B) DYNAMIC VS STATIC CONTENT - CRITICAL DECISION:
+      Ask yourself: "Does this content need to ANALYZE/INTERPRET the variable value to decide what to say?"
 
-      ❌ WRONG - Static creative content (same joke for any age):
+      → Just INSERTING a variable? Use print: { "intent": "print", "message": "Tu nombre es \${name}" }
+      → Need to ANALYZE the value? MANDATORY use format: { "intent": "format", "data": {...}, "instruction": "..." }
+
+      Content is DYNAMIC (MUST use format) when:
+      - Playbook says "bromea/joke", "personaliza/personalize", "comenta/comment", "genera/generate", "apropiado/appropriate"
+      - Content should VARY based on the value (different for 20 vs 80)
+      - Requires interpretation/analysis of the value to decide what to say
+
+      ❌ ABSOLUTELY WRONG - Hardcoding analyzed content (same message for ALL values):
+      Playbook: "bromea sobre su edad"
       { "intent": "print", "message": "Tienes \${a3.output.answer} años, ¡no te preocupes, la edad es solo un número!" }
+      ↑ WRONG: Same joke for age 20, 50, and 80 - NOT analyzing the value!
 
-      ✅ RIGHT - Dynamic creative content (adapts to actual age):
-      { "id": "a4", "intent": "format", "data": { "nombre": "\${a1.output.answer}", "edad": "\${a3.output.answer}" }, "instruction": "Genera un saludo personalizado para {nombre} y una broma creativa sobre tener {edad} años. La broma debe ser apropiada y diferente según la edad específica." },
+      ✅ CORRECT - Analyze value to generate appropriate content:
+      Playbook: "bromea sobre su edad"
+      { "id": "a4", "intent": "format", "data": { "nombre": "\${a1.output.answer}", "edad": "\${a3.output.answer}" }, "instruction": "Genera un saludo para {nombre} y una broma sobre {edad} años. La broma DEBE variar según la edad: diferente para joven (20), adulto (40), mayor (70)." },
       { "intent": "print", "message": "\${a4.output.formatted}" }
+      ↑ CORRECT: Will generate different jokes for different ages!
 
    C) COMPLEX TEMPLATES - Copy COMPLETE template from playbook to format instruction:
       - Keep ALL conditional logic (e.g., "Estimado o Estimada si es chica, deducelo por el nombre")
@@ -1472,17 +1492,27 @@ CRITICAL RULES:
       - ❌ ABSOLUTELY WRONG: print with "\${2023 - new Date(birthdate).getFullYear()}"
       - ✅ RIGHT: { "id": "formatted", "intent": "format", "data": "\${usersArray}", "instruction": "Calculate age from birthdate..." }
 
-   B) CREATIVE/ADAPTIVE CONTENT - If playbook requests content that must adapt to data values:
-      - DETECT keywords: "bromea", "joke", "personaliza", "personalize", "comenta", "comment", "genera", "generate", "apropiado", "appropriate"
-      - If text should be DIFFERENT based on data (e.g., different joke for age 20 vs age 80), use format action
-      - NEVER hardcode creative content during planning - generate it at runtime based on actual data
+   B) DYNAMIC VS STATIC CONTENT - CRITICAL DECISION:
+      Ask yourself: "Does this content need to ANALYZE/INTERPRET the variable value to decide what to say?"
 
-      ❌ WRONG - Static creative content (same joke for any age):
+      → Just INSERTING a variable? Use print: { "intent": "print", "message": "Tu nombre es \${name}" }
+      → Need to ANALYZE the value? MANDATORY use format: { "intent": "format", "data": {...}, "instruction": "..." }
+
+      Content is DYNAMIC (MUST use format) when:
+      - Playbook says "bromea/joke", "personaliza/personalize", "comenta/comment", "genera/generate", "apropiado/appropriate"
+      - Content should VARY based on the value (different for 20 vs 80)
+      - Requires interpretation/analysis of the value to decide what to say
+
+      ❌ ABSOLUTELY WRONG - Hardcoding analyzed content (same message for ALL values):
+      Playbook: "bromea sobre su edad"
       { "intent": "print", "message": "Tienes \${a3.output.answer} años, ¡no te preocupes, la edad es solo un número!" }
+      ↑ WRONG: Same joke for age 20, 50, and 80 - NOT analyzing the value!
 
-      ✅ RIGHT - Dynamic creative content (adapts to actual age):
-      { "id": "a4", "intent": "format", "data": { "nombre": "\${a1.output.answer}", "edad": "\${a3.output.answer}" }, "instruction": "Genera un saludo personalizado para {nombre} y una broma creativa sobre tener {edad} años. La broma debe ser apropiada y diferente según la edad específica." },
+      ✅ CORRECT - Analyze value to generate appropriate content:
+      Playbook: "bromea sobre su edad"
+      { "id": "a4", "intent": "format", "data": { "nombre": "\${a1.output.answer}", "edad": "\${a3.output.answer}" }, "instruction": "Genera un saludo para {nombre} y una broma sobre {edad} años. La broma DEBE variar según la edad: diferente para joven (20), adulto (40), mayor (70)." },
       { "intent": "print", "message": "\${a4.output.formatted}" }
+      ↑ CORRECT: Will generate different jokes for different ages!
 
    C) COMPLEX TEMPLATES - Copy COMPLETE template from playbook to format instruction:
       - Keep ALL conditional logic (e.g., "Estimado o Estimada si es chica, deducelo por el nombre")
