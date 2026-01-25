@@ -349,6 +349,41 @@ CRITICAL RULES:
    { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },  ← Always asks!
    { "intent": "print", "message": "..." }
 
+16. CONDITIONAL "FINALLY" ACTIONS - CRITICAL: When playbook says "finalmente" (finally) with actions that depend on conditional data:
+   - ANALYZE: Does the "finally" action need data that only exists in the "then" branch?
+   - If YES: Put the "finally" action INSIDE the "then" branch, create appropriate alternative for "else"
+   - If NO: Put the "finally" action after the if statement
+
+   EXAMPLE SCENARIO:
+   Playbook: "Pregunta si quiere continuar, si quiere pregunta su edad. Finalmente saluda y bromea sobre su edad."
+   Translation: "Ask if they want to continue, if yes ask their age. Finally greet and joke about their age."
+
+   ANALYSIS: "bromea sobre su edad" (joke about age) needs age data, which only exists in "then" branch!
+
+   ✅ RIGHT - "Finally" action inside conditional:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "intent": "if",
+     "condition": "\${a2.output.answer} === 'Sí'",
+     "then": [
+       { "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
+       { "intent": "print", "message": "¡Hola \${a1.output.answer}! Tienes \${a3.output.answer} años, ¡qué joven!" }
+     ],
+     "else": [
+       { "intent": "print", "message": "¡Hasta luego, \${a1.output.answer}! Espero que tengas un gran día." }
+     ]
+   }
+
+   ❌ WRONG - "Finally" action outside conditional (will fail when user says "No"):
+   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "intent": "if",
+     "condition": "\${a2.output.answer} === 'Sí'",
+     "then": [{ "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }],
+     "else": []
+   },
+   { "intent": "print", "message": "¡Hola! Tienes \${a3.output.answer} años" }  ← a3 doesn't exist if user said "No"!
+
 ${delegationNote}${teamDelegationNote}
 
 RESPONSE FORMAT (ALWAYS use this):
@@ -828,6 +863,41 @@ CRITICAL RULES:
    { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },  ← Always asks!
    { "intent": "print", "message": "..." }
 
+16. CONDITIONAL "FINALLY" ACTIONS - CRITICAL: When playbook says "finalmente" (finally) with actions that depend on conditional data:
+   - ANALYZE: Does the "finally" action need data that only exists in the "then" branch?
+   - If YES: Put the "finally" action INSIDE the "then" branch, create appropriate alternative for "else"
+   - If NO: Put the "finally" action after the if statement
+
+   EXAMPLE SCENARIO:
+   Playbook: "Pregunta si quiere continuar, si quiere pregunta su edad. Finalmente saluda y bromea sobre su edad."
+   Translation: "Ask if they want to continue, if yes ask their age. Finally greet and joke about their age."
+
+   ANALYSIS: "bromea sobre su edad" (joke about age) needs age data, which only exists in "then" branch!
+
+   ✅ RIGHT - "Finally" action inside conditional:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "intent": "if",
+     "condition": "\${a2.output.answer} === 'Sí'",
+     "then": [
+       { "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
+       { "intent": "print", "message": "¡Hola \${a1.output.answer}! Tienes \${a3.output.answer} años, ¡qué joven!" }
+     ],
+     "else": [
+       { "intent": "print", "message": "¡Hasta luego, \${a1.output.answer}! Espero que tengas un gran día." }
+     ]
+   }
+
+   ❌ WRONG - "Finally" action outside conditional (will fail when user says "No"):
+   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "intent": "if",
+     "condition": "\${a2.output.answer} === 'Sí'",
+     "then": [{ "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }],
+     "else": []
+   },
+   { "intent": "print", "message": "¡Hola! Tienes \${a3.output.answer} años" }  ← a3 doesn't exist if user said "No"!
+
 RESPONSE FORMAT (ALWAYS use this):
 {
   "actions": [
@@ -1048,6 +1118,41 @@ CRITICAL RULES:
    { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
    { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },  ← Always asks!
    { "intent": "print", "message": "..." }
+
+16. CONDITIONAL "FINALLY" ACTIONS - CRITICAL: When playbook says "finalmente" (finally) with actions that depend on conditional data:
+   - ANALYZE: Does the "finally" action need data that only exists in the "then" branch?
+   - If YES: Put the "finally" action INSIDE the "then" branch, create appropriate alternative for "else"
+   - If NO: Put the "finally" action after the if statement
+
+   EXAMPLE SCENARIO:
+   Playbook: "Pregunta si quiere continuar, si quiere pregunta su edad. Finalmente saluda y bromea sobre su edad."
+   Translation: "Ask if they want to continue, if yes ask their age. Finally greet and joke about their age."
+
+   ANALYSIS: "bromea sobre su edad" (joke about age) needs age data, which only exists in "then" branch!
+
+   ✅ RIGHT - "Finally" action inside conditional:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "intent": "if",
+     "condition": "\${a2.output.answer} === 'Sí'",
+     "then": [
+       { "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
+       { "intent": "print", "message": "¡Hola \${a1.output.answer}! Tienes \${a3.output.answer} años, ¡qué joven!" }
+     ],
+     "else": [
+       { "intent": "print", "message": "¡Hasta luego, \${a1.output.answer}! Espero que tengas un gran día." }
+     ]
+   }
+
+   ❌ WRONG - "Finally" action outside conditional (will fail when user says "No"):
+   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "intent": "if",
+     "condition": "\${a2.output.answer} === 'Sí'",
+     "then": [{ "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }],
+     "else": []
+   },
+   { "intent": "print", "message": "¡Hola! Tienes \${a3.output.answer} años" }  ← a3 doesn't exist if user said "No"!
 
 RESPONSE FORMAT (ALWAYS use this):
 {
@@ -1411,6 +1516,41 @@ CRITICAL RULES:
    { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
    { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },  ← Always asks!
    { "intent": "print", "message": "..." }
+
+16. CONDITIONAL "FINALLY" ACTIONS - CRITICAL: When playbook says "finalmente" (finally) with actions that depend on conditional data:
+   - ANALYZE: Does the "finally" action need data that only exists in the "then" branch?
+   - If YES: Put the "finally" action INSIDE the "then" branch, create appropriate alternative for "else"
+   - If NO: Put the "finally" action after the if statement
+
+   EXAMPLE SCENARIO:
+   Playbook: "Pregunta si quiere continuar, si quiere pregunta su edad. Finalmente saluda y bromea sobre su edad."
+   Translation: "Ask if they want to continue, if yes ask their age. Finally greet and joke about their age."
+
+   ANALYSIS: "bromea sobre su edad" (joke about age) needs age data, which only exists in "then" branch!
+
+   ✅ RIGHT - "Finally" action inside conditional:
+   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "intent": "if",
+     "condition": "\${a2.output.answer} === 'Sí'",
+     "then": [
+       { "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
+       { "intent": "print", "message": "¡Hola \${a1.output.answer}! Tienes \${a3.output.answer} años, ¡qué joven!" }
+     ],
+     "else": [
+       { "intent": "print", "message": "¡Hasta luego, \${a1.output.answer}! Espero que tengas un gran día." }
+     ]
+   }
+
+   ❌ WRONG - "Finally" action outside conditional (will fail when user says "No"):
+   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
+   { "intent": "if",
+     "condition": "\${a2.output.answer} === 'Sí'",
+     "then": [{ "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }],
+     "else": []
+   },
+   { "intent": "print", "message": "¡Hola! Tienes \${a3.output.answer} años" }  ← a3 doesn't exist if user said "No"!
 
 RESPONSE FORMAT (ALWAYS use this):
 {
