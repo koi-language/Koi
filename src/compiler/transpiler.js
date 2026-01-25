@@ -787,6 +787,10 @@ export class KoiTranspiler {
         return this.generateWhile(node);
       case 'ReturnStatement':
         return this.generateReturn(node);
+      case 'ThrowStatement':
+        return this.generateThrow(node);
+      case 'TryStatement':
+        return this.generateTry(node);
       case 'SendStatement':
         return this.generateSend(node);
       case 'UsePlaybookStatement':
@@ -901,6 +905,43 @@ export class KoiTranspiler {
   generateReturn(node) {
     const value = node.value ? ` ${this.generateExpression(node.value)}` : '';
     return this.emit(`${this.getIndent()}return${value};\n`, node);
+  }
+
+  generateThrow(node) {
+    return this.emit(`${this.getIndent()}throw ${this.generateExpression(node.argument)};\n`, node);
+  }
+
+  generateTry(node) {
+    let code = this.emit(`${this.getIndent()}try {\n`, node);
+    this.indent++;
+    for (const stmt of node.body) {
+      code += this.generateStatement(stmt);
+    }
+    this.indent--;
+    code += this.emit(`${this.getIndent()}}`);
+
+    if (node.handler) {
+      code += this.emit(` catch (${node.handler.param.name}) {\n`);
+      this.indent++;
+      for (const stmt of node.handler.body) {
+        code += this.generateStatement(stmt);
+      }
+      this.indent--;
+      code += this.emit(`${this.getIndent()}}`);
+    }
+
+    if (node.finalizer) {
+      code += this.emit(` finally {\n`);
+      this.indent++;
+      for (const stmt of node.finalizer) {
+        code += this.generateStatement(stmt);
+      }
+      this.indent--;
+      code += this.emit(`${this.getIndent()}}`);
+    }
+
+    code += this.emit('\n');
+    return code;
   }
 
   generateSend(node) {
