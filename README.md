@@ -2,9 +2,7 @@
   <img src="koi.png" alt="KOI Language Logo" width="400"/>
 </div>
 
-# Koi
-
-**Agent-first language. Calm orchestration.** 🌊
+# Koi - Agent-first language. Calm orchestration. 🌊
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-koi--language%2FKoi-6495ED?logo=github)](https://github.com/koi-language/Koi)
@@ -97,31 +95,6 @@ ln -s "$(pwd)/vscode-koi-extension" ~/.cursor/extensions/koi-lang
 - 🔍 Go to Definition support
 
 **For more installation methods and troubleshooting:** See the [Editor Setup Guide](doc/00-editor-setup.md).
-
-## GitHub Syntax Highlighting
-
-KOI code blocks in markdown files (README, Issues, PRs) automatically get syntax highlighting on GitHub!
-
-````markdown
-```koi
-Agent Hello : Worker {
-  on greet(args: Json) {
-    console.log("Hello from KOI!")
-  }
-}
-```
-````
-
-**Status:**
-- ✅ **Current**: Using JavaScript highlighting (very similar syntax)
-- 🚀 **Soon**: Native KOI highlighting (PR submitted to [github/linguist](https://github.com/github/linguist))
-
-Once the PR is merged, GitHub will recognize `.koi` files with:
-- 🎨 Cornflower Blue (#6495ED) in language statistics
-- ✨ Full syntax highlighting for code blocks
-- 📊 Language detection in repositories
-
-See [LINGUIST.md](LINGUIST.md) for technical details and contribution status.
 
 ## Usage
 
@@ -258,7 +231,7 @@ Agent Orchestrator : Worker {
 }
 ```
 
-See [MCP_GUIDE.md](MCP_GUIDE.md) for complete documentation.
+See [MCP Integration Guide](doc/10-mcp-integration.md) for complete documentation.
 
 ### Define Skills
 
@@ -351,23 +324,7 @@ Example: "Translate to French and count words"
 - Action 1: Translate → `{ translated: "bonjour monde" }`
 - Action 2: Count words on `${previousResult.translated}` → `{ wordCount: 2 }`
 
-See [TASK_CHAINING_GUIDE.md](TASK_CHAINING_GUIDE.md) for details.
-
-### 🆕 Automatic Routing
-
-Shows how ANY agent can automatically decompose and delegate tasks:
-
-```bash
-koi run examples/auto-routing-demo.koi
-```
-
-Key concepts:
-- Regular agents receiving complex tasks
-- Automatic decomposition by LLM
-- Cascading resolution (own handlers → skills → team routing)
-- Intelligent semantic matching via embeddings
-
-See [AUTO_ROUTING_GUIDE.md](AUTO_ROUTING_GUIDE.md) for explanation.
+See [Task Chaining Guide](doc/08-task-chaining.md) for details.
 
 ### Simple
 
@@ -417,23 +374,7 @@ Example showing MCP (Model Context Protocol) address support:
 koi run examples/mcp-example.koi
 ```
 
-### Automatic Planning
-
-Demonstrates automatic planning system where agents can decompose complex goals:
-
-```bash
-koi run examples/planning-demo.koi
-```
-
-### Planning with Actions
-
-Shows how LLM can plan and generate executable actions:
-
-```bash
-koi run examples/planning-with-actions.koi
-```
-
-See [PLANNING_GUIDE.md](PLANNING_GUIDE.md) for detailed planning system documentation.
+See [MCP Integration Guide](doc/10-mcp-integration.md) and [Planning System Guide](doc/09-planning.md) for more details on advanced features.
 
 ## Source Maps
 
