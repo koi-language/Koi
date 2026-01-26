@@ -702,7 +702,7 @@ function peg$parse(input, options) {
     return { type: 'ConstDeclaration', name, value, location: location() };
   }
   function peg$f47(name, value) {
-    return { type: 'ConstDeclaration', name, value, location: location() };
+    return { type: 'VariableDeclaration', name, init: value, varType: null, location: location() };
   }
   function peg$f48(cond, then, alt) {
     return { type: 'IfStatement', condition: cond, then, else: alt, location: location() };

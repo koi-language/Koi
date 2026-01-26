@@ -419,7 +419,7 @@ ConstDeclaration
       return { type: 'ConstDeclaration', name, value, location: location() };
     }
   / "let"i _ name:Identifier _ "=" _ value:Expression _ {
-      return { type: 'ConstDeclaration', name, value, location: location() };
+      return { type: 'VariableDeclaration', name, init: value, varType: null, location: location() };
     }
 
 IfStatement
