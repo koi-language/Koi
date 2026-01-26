@@ -73,7 +73,8 @@ export default {
 
         // Show progress
         const intent = resolvedAction.intent || resolvedAction.type;
-        cliLogger.progress(`[${agent.name}] ${intent} (iteration ${i + 1}/${count})`);
+        const displayText = resolvedAction.desc ? resolvedAction.desc.replace(/\.\.\.$/, '') : 'Thinking';
+        cliLogger.planning(`[🤖 ${agent.name}] ${displayText}`);
 
         // Get action definition
         const actionDef = actionRegistry.get(nestedAction.intent || nestedAction.type);

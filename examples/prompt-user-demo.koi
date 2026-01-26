@@ -6,7 +6,7 @@ package "prompt-user-demo"
 role Worker { can execute }
 
 Agent Assistant : Worker {
-  llm default = { provider: "openai", model: "gpt-4o-mini" }
+  llm default = { provider: "openai", model: "gpt-5.2" }
 
   on greet(args: Json) {
     playbook """

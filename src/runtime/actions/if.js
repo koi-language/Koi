@@ -5,7 +5,7 @@
 export default {
   type: 'if',
   intent: 'if',
-  description: 'Execute actions conditionally based on a condition. Use template variables like ${id.output.field} in condition → Returns: result from executed branch',
+  description: 'Execute actions conditionally. CONDITION: Use string "${a1.output} === \'yes\'" for exact match, OR object with llm_eval for semantic: { "llm_eval": true, "instruction": "Return true if user agrees", "data": "${a1.output.answer}" } → Returns: { executed: "then"|"else", result: ... }',
   permission: 'execute',
 
   schema: {
@@ -63,13 +63,41 @@ export default {
       results: []
     };
 
-    // Evaluate condition directly using agent's evaluateCondition method
-    // This properly handles template variables and quotes strings correctly
+    // Evaluate condition
     let conditionResult = false;
     try {
-      conditionResult = agent.evaluateCondition(condition, context);
+      // Check if condition is LLM-evaluated (object with llm_eval: true)
+      if (typeof condition === 'object' && condition.llm_eval === true) {
+        // Show progress while evaluating condition
+        const displayText = condition.desc ? condition.desc.replace(/\.\.\.$/, '') : 'Evaluating condition';
+        cliLogger.planning(`[🤖 ${agent.name}] ${displayText}`);
+
+        // Use call_llm action to evaluate condition with LLM
+        const callLlmAction = (await import('./call-llm.js')).default;
+
+        // Resolve data references
+        const resolvedData = agent.resolveObjectReferences(condition.data || {}, context);
+
+        // Create call_llm action to evaluate condition
+        const callLlmRequest = {
+          data: resolvedData,
+          instruction: condition.instruction + "\n\nRESPOND WITH ONLY 'true' or 'false' (lowercase, no quotes, no explanation)."
+        };
+
+        const llmResult = await callLlmAction.execute(callLlmRequest, agent);
+        const resultText = llmResult.result.trim().toLowerCase();
+
+        // Clear progress
+        cliLogger.clear();
+
+        // Parse boolean result
+        conditionResult = resultText === 'true';
+      } else {
+        // Simple string condition - evaluate with JavaScript
+        conditionResult = agent.evaluateCondition(condition, context);
+      }
     } catch (error) {
-      throw new Error(`Failed to evaluate condition "${condition}": ${error.message}`);
+      throw new Error(`Failed to evaluate condition: ${error.message}`);
     }
 
     // Execute appropriate branch
@@ -91,7 +119,8 @@ export default {
 
       // Show progress
       const intent = resolvedAction.intent || resolvedAction.type;
-      cliLogger.progress(`[${agent.name}] ${intent}`);
+      const displayText = resolvedAction.desc ? resolvedAction.desc.replace(/\.\.\.$/, '') : 'Thinking';
+      cliLogger.planning(`[🤖 ${agent.name}] ${displayText}`);
 
       // Get action definition
       const actionDef = actionRegistry.get(nestedAction.intent || nestedAction.type);

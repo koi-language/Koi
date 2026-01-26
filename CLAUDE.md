@@ -54,7 +54,7 @@ koi/
 │   │   ├── router.js           # Semantic routing between agents
 │   │   ├── registry.js         # Key-value store
 │   │   ├── action-registry.js  # Available actions
-│   │   └── actions/            # Built-in actions (format, print, etc.)
+│   │   └── actions/            # Built-in actions (generate, print, etc.)
 │   └── grammar/koi.pegjs       # Language grammar
 ├── examples/                    # Example .koi files
 ├── tests/                       # Test suite
@@ -228,6 +228,108 @@ koi run examples/registry-playbook-demo.koi --debug
 # Now uses createAllUser instead of 6 createUser calls
 ```
 
+### Template Variable Resolution for Question Field (2026)
+
+**Problem:** Template variables like `${a3.output.result}` were showing as literal text instead of being resolved when used in the `question` field of `prompt_user` actions. The LLM was correctly generating `call_llm` actions, but the template variable resolution wasn't working for the `question` field.
+
+**Root Cause:** The `resolveActionReferences` method in `src/runtime/agent.js` was resolving template variables in fields like `message`, `text`, `data`, `key`, `value`, etc., but was missing the `question` field used by `prompt_user` action.
+
+**Solution:** Added `question` field resolution to the `resolveActionReferences` method (line 621-623):
+```javascript
+// Resolve references in question field (for prompt_user action)
+if (resolved.question !== undefined) {
+  resolved.question = this.resolveObjectReferences(resolved.question, context);
+}
+```
+
+**Impact:**
+- `prompt_user` actions now correctly resolve template variables in their `question` field
+- Enables dynamic question generation in loops and conditional flows
+- Fixes iteration demos where questions depend on previous user responses
+
+**Files Modified:**
+- `src/runtime/agent.js` (resolveActionReferences method)
+
+**Testing:**
+```bash
+koi run examples/iteration-demo.koi
+# Now correctly resolves ${a2.output.result} in prompt_user questions
+```
+
+### System Prompt Simplification (2026)
+
+**Problem:** System prompts in `llm-provider.js` were over 400 lines long with repetitive rules and conflicting examples, making them inefficient and error-prone.
+
+**Solution:** Drastically simplified system prompts from ~400 lines to ~10-15 core rules:
+1. Rule for when to use `call_llm` (keywords: "random", "relacionado", "based on")
+2. Rule for loops with semantic conditions ("hasta que se despida")
+3. Rule for data persistence (registry_set/registry_get)
+4. Output format specification
+
+**Impact:**
+- Reduced token usage for every playbook execution
+- Clearer, more focused instructions for LLM
+- Fewer conflicting examples leading to better action generation
+- Maintained all critical functionality while removing redundancy
+
+**Files Modified:**
+- `src/runtime/llm-provider.js` (all 4 execution methods: executeOpenAI, executeAnthropic, executeOpenAIStreaming, executeAnthropicStreaming)
+
+### While Loop Structure with Initial Questions (2026)
+
+**Problem:** When playbooks said "Empieza preguntando X. En cada iteración, pregunta algo relacionado...", the LLM was putting ALL questions (including the initial one) inside the while loop, causing the initial question to repeat on every iteration.
+
+**User Report:**
+```
+¿Cuál es tu nombre?  ← Asked
+> Antonio
+...
+¿Cuál es tu nombre?  ← Repeated!
+> Antonio
+...
+¿Cuál es tu nombre?  ← Repeated again!
+```
+
+**Root Cause:** The system prompt rule #2 only showed a simple while loop structure without clarifying that "empieza" (starts by) means the action should be BEFORE the while, not inside it.
+
+**Solution:** Enhanced rule #2 in system prompt to explicitly show the pattern:
+```javascript
+// ✅ CORRECT structure
+{ "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },  // BEFORE while
+{ "intent": "registry_set", "key": "last_answer", "value": "${a1.output.answer}" },
+{ "intent": "while",
+  "condition": { "llm_eval": true, "instruction": "¿Continuar? (false si despide)", "data": "${a3.output.answer}" },
+  "actions": [
+    { "id": "prev", "intent": "registry_get", "key": "last_answer" },
+    { "id": "a2", "intent": "call_llm", "data": {"prev":"${prev.output.value}"}, "instruction": "Random question based on {prev}" },
+    { "id": "a3", "intent": "prompt_user", "question": "${a2.output.result}" },
+    { "intent": "registry_set", "key": "last_answer", "value": "${a3.output.answer}" },
+    { "intent": "print", "message": "Interesante: ${a3.output.answer}" }
+  ]
+}
+
+// ❌ WRONG: Putting "empieza" question INSIDE while (repeats every time!)
+```
+
+**Impact:**
+- Initial questions are now correctly placed BEFORE the while loop
+- Only dynamic/related questions are generated inside the loop using `call_llm`
+- Registry is used to maintain context between iterations
+- Fixes `examples/iteration-demo.koi` where name was asked repeatedly
+
+**Files Modified:**
+- `src/runtime/llm-provider.js` (rule #2 in all 4 execution methods)
+
+**Testing:**
+```bash
+koi run examples/iteration-demo.koi
+# Input: Antonio -> me gusta programar -> adios
+# Output:
+#   ¿Cuál es tu nombre? (asked ONCE)
+#   ¿Qué te inspira más sobre la vida de Antonio? (dynamic, based on name)
+#   ...then asks about programming (dynamic, based on previous answer)
+```
+
 ---
 
 ## Lessons Learned
@@ -238,7 +340,7 @@ The LLM system prompt is not just instructions—it's **architectural documentat
 ### 2. Template Variables Require Careful Handling
 - Only valid inside strings: `"${a1.output}"` ✅
 - NOT as direct values: `${a1.output}` ❌
-- Complex transformations need `format` action (dates, arrays, calculations)
+- Complex transformations need `call_llm` action (dates, arrays, calculations, dynamic content)
 
 ### 3. Streaming Adds Complexity
 - Actions must execute in order despite arriving asynchronously
@@ -344,9 +446,9 @@ DO NOT add print actions - just return the data.
 // ❌ WRONG - Nested templates can't be evaluated
 "${users.map(u => `| ${u.name} | ${u.age} |`).join('\n')}"
 
-// ✅ RIGHT - Use format action
-{ "id": "formatted", "intent": "format", "data": "${users}", "instruction": "Generate markdown table..." }
-{ "intent": "print", "message": "${formatted.output.formatted}" }
+// ✅ RIGHT - Use call_llm action
+{ "id": "result", "intent": "call_llm", "data": "${users}", "instruction": "Generate markdown table..." }
+{ "intent": "print", "message": "${result.output.result}" }
 ```
 
 ### 3. Forgetting to Read Files Before Editing

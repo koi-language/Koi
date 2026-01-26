@@ -73,7 +73,9 @@
       "Bash(gh pr create:*)",
       "Bash(git merge:*)",
       "Bash(md5:*)",
-      "Bash(ln:*)"
+      "Bash(ln:*)",
+      "Bash(printf:*)",
+      "Bash(KOI_DEBUG_LLM=1 timeout 15 node:*)"
     ]
   }
 }

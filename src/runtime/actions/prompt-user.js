@@ -9,7 +9,7 @@ import { cliLogger } from '../cli-logger.js';
 export default {
   type: 'prompt_user',
   intent: 'prompt_user',
-  description: 'Ask the user a question via command line and get their text response. If options are provided, shows an interactive menu with arrow key navigation → Returns: { answer }. Access with ${id.output.answer}',
+  description: 'Ask the user a question via command line. Can include "options" array for interactive menu when user must choose from a limited set (e.g., ["Sí", "No"], ["Opción A", "Opción B", "Opción C"]) - useful for Yes/No, multiple choice, etc. CRITICAL: "question" field ONLY accepts 100% static text OR ${variable} reference to call_llm result. If question needs generation/adaptation (keywords: random, relacionado, based on, adapted), you MUST use call_llm FIRST to generate it, then use ${result} here → Returns: { answer }. Access with ${id.output.answer}',
   permission: 'execute', // Requires execute permission
 
   schema: {

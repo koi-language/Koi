@@ -6,27 +6,16 @@ package "iteration-demo"
 role Worker { can execute }
 
 Agent Assistant : Worker {
-  llm default = { provider: "openai", model: "gpt-4o-mini" }
-
-  on test_repeat(args: Json) {
-    playbook """
-    Pregunta al usuario 3 veces por su nombre.
-    Al final, muestra todas las respuestas.
-    """
-  }
+  llm default = { provider: "openai", model: "gpt-5.2" }
 
   on test_while(args: Json) {
     playbook """
-    Habla con el usuario hasta que te diga "hasta luego".
-    En cada iteración, pregunta qué quiere hablar y responde algo relacionado.
-    Cuando diga "hasta luego", despídete cordialmente.
+    Habla con el usuario hasta que se despida de ti.
+    En cada iteración, pregunta algo random relacionado con la pregunta y la respuesta anterior para que parezca que sigues la conversación.
+    Cuando se despida o veas que te expresa que quiere terminar, despídete cordialmente y finaliza la conversación.
+    SUPER IMPORTANTE, preguntale el nombre y saludalo modo encantado de conocerte!
     """
   }
 }
 
-// To test:
-// koi run examples/iteration-demo.koi
-// Then uncomment one of the following:
-
-run Assistant.test_repeat({})
-// run Assistant.test_while({})
+run Assistant.test_while({})

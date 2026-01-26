@@ -22,7 +22,7 @@ function formatPromptForDebug(text) {
 export class LLMProvider {
   constructor(config = {}) {
     this.provider = config.provider || 'openai';
-    this.model = config.model || 'gpt-4o-mini';
+    this.model = config.model;
     this.temperature = config.temperature ?? 0.1; // Low temperature for deterministic results
     this.maxTokens = config.max_tokens || 8000; // Increased to avoid truncation of long responses
 
@@ -46,15 +46,131 @@ export class LLMProvider {
     }
   }
 
+  /**
+   * Format text for debug output with gray color
+   */
+  formatDebugText(text) {
+    const lines = text.split('\n');
+    return lines.map(line => `> \x1b[90m${line}\x1b[0m`).join('\n');
+  }
+
+  /**
+   * Log LLM request (system + user prompts)
+   */
+  logRequest(model, systemPrompt, userPrompt, context = '') {
+    if (process.env.KOI_DEBUG_LLM !== '1') return;
+
+    console.error('─'.repeat(80));
+    console.error(`[LLM Debug] Request - Model: ${model}${context ? ' | ' + context : ''}`);
+    console.error('System Prompt:');
+    console.error(this.formatDebugText(systemPrompt));
+    console.error('============');
+    console.error('User Prompt:');
+    console.error('============');
+    console.error(this.formatDebugText(userPrompt));
+    console.error('─'.repeat(80));
+  }
+
+  /**
+   * Log LLM response
+   */
+  logResponse(content, context = '') {
+    if (process.env.KOI_DEBUG_LLM !== '1') return;
+
+    console.error(`\n[LLM Debug] Response${context ? ' - ' + context : ''} (${content.length} chars)`);
+    console.error('─'.repeat(80));
+
+    // Try to format JSON for better readability
+    let formattedContent = content;
+    try {
+      const parsed = JSON.parse(content);
+      formattedContent = JSON.stringify(parsed, null, 2);
+    } catch (e) {
+      // Not JSON, use as is
+    }
+
+    const lines = formattedContent.split('\n');
+    for (const line of lines) {
+      console.error(`< \x1b[90m${line}\x1b[0m`);
+    }
+    console.error('─'.repeat(80));
+  }
+
+  /**
+   * Log simple message
+   */
+  logDebug(message) {
+    if (process.env.KOI_DEBUG_LLM !== '1') return;
+    console.error(`[LLM Debug] ${message}`);
+  }
+
+  /**
+   * Log error
+   */
+  logError(message, error) {
+    if (process.env.KOI_DEBUG_LLM !== '1') return;
+    console.error(`[LLM Debug] ERROR: ${message}`);
+    if (error) {
+      console.error(error.stack || error.message);
+    }
+  }
+
+  /**
+   * Call OpenAI with logging
+   * @param {Object} options - { model, messages, temperature, max_tokens, stream, response_format }
+   * @param {string} context - Context description for logging
+   * @returns {Promise} - OpenAI completion response
+   */
+  async callOpenAI(options, context = '') {
+    const { model, messages, temperature = 0, max_tokens = 4000, stream = false, response_format } = options;
+
+    // Extract prompts for logging
+    const systemPrompt = messages.find(m => m.role === 'system')?.content || '';
+    const userPrompt = messages.find(m => m.role === 'user')?.content || '';
+
+    // Log request
+    this.logRequest(model, systemPrompt, userPrompt, context);
+
+    // Make API call with buildApiParams to handle gpt-5.2
+    const completion = await this.openai.chat.completions.create(
+      this.buildApiParams({
+        model,
+        messages,
+        temperature,
+        max_tokens,
+        stream,
+        ...(response_format && { response_format })
+      })
+    );
+
+    // If not streaming, log response immediately
+    if (!stream) {
+      const content = completion.choices[0].message.content;
+      this.logResponse(content, context);
+    }
+
+    return completion;
+  }
+
+  /**
+   * Build API parameters, excluding max_tokens for gpt-5.2
+   */
+  buildApiParams(baseParams) {
+    // gpt-5.2 doesn't accept max_tokens parameter
+    if (baseParams.model === 'gpt-5.2') {
+      const { max_tokens, ...paramsWithoutMaxTokens } = baseParams;
+      return paramsWithoutMaxTokens;
+    }
+    return baseParams;
+  }
+
   async executePlanning(prompt) {
-    // Simple, fast planning call without all the overhead
-    // ALWAYS use the fastest model for planning
     try {
       let response;
 
       if (this.provider === 'openai') {
         const completion = await this.openai.chat.completions.create({
-          model: 'gpt-4o-mini',  // Force fastest model for planning
+          model: 'gpt-5.2',  // Force best model for planning
           messages: [
             {
               role: 'system',
@@ -62,8 +178,7 @@ export class LLMProvider {
             },
             { role: 'user', content: prompt }
           ],
-          temperature: 0,  // Use 0 for maximum determinism
-          max_tokens: 800
+          temperature: 0
         });
         response = completion.choices[0].message.content.trim();
       } else if (this.provider === 'anthropic') {
@@ -205,248 +320,33 @@ CRITICAL: When delegating work that involves MULTIPLE items (e.g., "create these
 - NEVER group multiple items into one action unless the handler explicitly expects an array`
       : '';
 
-    const systemPrompt = `You are a Koi agent executor. Your job is to convert user instructions into a precise sequence of executable actions.
+    const systemPrompt = `Convert playbook to JSON actions.
+
+OUTPUT: { "actions": [...] }
 
 CRITICAL RULES:
-1. Execute EVERY instruction in the user's request - do not skip any steps
-2. Return ONLY raw JSON - NO markdown, NO wrapping, NO "result" field
-3. Follow the EXACT order of instructions given by the user
-4. NEVER hardcode dynamic data - ALWAYS use template variables:
-   - ❌ WRONG: "✅ 6 users created" (hardcoded count)
-   - ✅ RIGHT: "✅ \${a1.output.count + a2.output.count + ...} users created" (dynamic)
-   - ❌ WRONG: "| Sr | Alice | 30 |" (hardcoded name/age)
-   - ✅ RIGHT: "| \${a8.output.users[0].name.endsWith('a') ? 'Sra' : 'Sr'} | \${a8.output.users[0].name} | \${a8.output.users[0].age} |"
-   - If you see "X users created" where X is dynamic, replace X with a template expression ONLY for simple arithmetic
-   - If you see "{el nombre del usuario}" in instructions, use \${actionId.output.name}, NOT a hardcoded value
-   - CRITICAL RULE - COMPLEX CALCULATIONS: If text has placeholders like {x}, {age}, {días}, {dd/mm/yyyy} that need:
-     * Age calculations from birthdates
-     * Date formatting
-     * Time differences
-     * Any arithmetic involving dates
-     → MANDATORY: Use format action, NEVER generate template expressions with Date/time calculations
-     → ❌ ABSOLUTELY WRONG: \${new Date(...).getFullYear() - ...} or any Date arithmetic in templates
-     → ✅ ALWAYS RIGHT: { "id": "formatted", "intent": "format", "data": "\${usersArray}", "instruction": "For each user calculate age from birthdate and generate email..." }, then print \${formatted.output.formatted}
-5. NEVER use .map() or arrow functions with nested template literals in template variables:
-   - ❌ WRONG: \${array.map(item => \`text \${item.field}\`).join('\\n')} (nested templates cannot be evaluated)
-   - ✅ RIGHT: Use format action to transform array data into display text
-   - When displaying tables/lists from array data: { "id": "aX", "intent": "format", "data": "\${arrayActionId.output.users}", "instruction": "Format as markdown table with columns: Sr/Sra, Name, Age. Deduce gender from name ending in 'a'" }
-   - Then print the formatted result: { "intent": "print", "message": "\${aX.output.formatted}" }
-6. When iterating over arrays, generate actions for ALL elements dynamically
-   - NEVER hardcode a fixed number of rows/items when the actual array size might differ
-7. EXTRACT ALL DATA FROM NATURAL LANGUAGE - Parse specifications carefully to get EVERY field:
-   - "Alice: id=001, age=30, email=alice@example.com" → { "name": "Alice", "id": "001", "age": 30, "email": "alice@example.com" }
-   - "Bob: id=002, de 17 años, bob@example.com" → { "name": "Bob", "id": "002", "age": 17, "email": "bob@example.com" }
-   - Pattern: "NAME: property1, property2..." means text before colon is the name
-   - Convert natural language ages: "de 17 años" → age: 17, "age is 35" → age: 35
-   - NEVER omit fields! If you see a name in the spec, include it in the data object
-8. Use "print" actions to display ALL requested output to the user
-9. ALWAYS use valid JSON - all values must be proper JSON types (strings, numbers, objects, arrays, booleans, null)
-10. EFFICIENCY: Group consecutive print actions into a single print using \\n for line breaks
-   - WRONG: Three separate prints for header lines
-   - RIGHT: One print with "Line1\\nLine2\\nLine3"
-11. EFFICIENCY - Batch Operations: When performing the same operation on multiple items, check if a batch/plural version exists:
-   - Look for plural intent names in available delegation actions: createAllUser/createAllUsers (batch) vs createUser (single)
-   - ❌ WRONG: Six separate createUser calls for 6 users
-   - ✅ RIGHT: One createAllUser call with array of all 6 users: { "actionType": "delegate", "intent": "createAllUser", "data": { "users": [{name: "Alice", id: "001", ...}, {name: "Bob", id: "002", ...}, ...] } }
-   - Apply this principle to ANY repeated operation where a batch version exists
-   - Benefits: Fewer network calls, better performance, cleaner action sequences
-12. ACTION IDs - CRITICAL: Add "id" field ONLY to actions that return DATA you need later
-   - ✅ PUT IDs ON: delegate actions, registry_get, registry_keys, registry_search (they return data)
-   - ❌ NEVER PUT IDs ON: print, log, format, update_state, registry_set, registry_delete (no useful output)
-   - Sequential IDs: a1, a2, a3, ... starting fresh for each playbook execution
-   - The "id" field goes on THE ACTION THAT PRODUCES THE DATA, not on the action that uses it!
+1. Dynamic content (random/relacionado/based on) → call_llm FIRST, then use \${id.output.result}
+2. Loops: "hasta que se despida" → while with llm_eval condition
+3. Loop structure: initial question BEFORE while → registry_set BEFORE while → while loop (registry_get → call_llm → prompt_user → registry_set → print)
+4. IDs: Add "id" only when you'll reference \${id.output} later
+5. Template variables ONLY in strings: "text \${var}" not \${var}
+6. Group consecutive prints with \\n
+7. User feedback: Add "desc" field in English gerund form WITHOUT trailing dots. Make it natural and conversational, NOT technical/explicit (e.g., "Analyzing your response", "Processing your message", "Understanding what you said"). Avoid exposing implementation details. Animated spinner added automatically. If omitted, shows "Thinking"
 
-   EXAMPLES:
-   ❌ WRONG - ID on print action:
-   { "id": "a1", "actionType": "direct", "intent": "print", "message": "Creating user" },
-   { "actionType": "delegate", "intent": "createUser", "data": {...} },
-   { "actionType": "direct", "intent": "print", "message": "Name: \${a1.output.name}" } ← a1 is print, has no name field!
-
-   ✅ RIGHT - ID on data-producing action:
-   { "actionType": "direct", "intent": "print", "message": "Fetching user..." },
-   { "id": "a1", "actionType": "delegate", "intent": "getUser", "data": {"id": "001"} },
-   { "actionType": "direct", "intent": "print", "message": "Name: \${a1.output.name}" } ← a1 is getUser, has name field!
-
-13. RETURN vs FORMAT ACTIONS - CRITICAL: Know when to return raw data vs formatted output:
-   - If playbook says "Return: { count, users: [array] }" → MUST return actual JSON array, NOT a formatted string
-   - "Transform results to extract user data" from registry_search means reference the .results array directly
-   - NEVER use format action before return when the playbook asks for an array
-   - Use format action ONLY for final display output to users, NEVER for returning data structures
-
-   When playbook says "Transform results to extract user data" + "Return: { count, users: [array] }":
-   ❌ WRONG:
-   { "id": "a1", "intent": "registry_search", "query": {} },
-   { "id": "a2", "intent": "format", "data": "\${a1.output.results}", "instruction": "..." },
-   { "intent": "return", "data": { "users": "\${a2.output.formatted}" } }  ← Returns STRING!
-
-   ✅ RIGHT:
-   { "id": "a1", "intent": "registry_search", "query": {} },
-   { "intent": "return", "data": { "count": "\${a1.output.count}", "users": "\${a1.output.results}" } }  ← Returns actual array!
-
-   - registry_search already returns { results: [{key, value}, ...] }, just use that array directly
-   - The caller can access individual users with \${actionId.output.users[0].value.name}
-   - Only use format when explicitly asked to display/print formatted output
-
-14. PROMPT_USER WITH OPTIONS - CRITICAL: Detect when questions have limited/boolean answers:
-   - ALWAYS analyze the question context to determine if it's boolean or has limited options
-   - Questions like "quiere continuar", "do you want", "yes or no", "acepta" → Use options: ["Sí", "No"] or ["Yes", "No"]
-   - Questions with 2-3 obvious choices → Use options array for interactive menu with arrow keys
-   - Questions asking for open text (name, age, description) → NO options (text input mode)
-
-   CRITICAL DETECTION RULES:
-   - Keywords that indicate boolean: "quiere", "desea", "acepta", "want", "do you", "would you", "continuar"
-   - Questions with "o" / "or" indicating choices: "norte o sur", "male or female" → Extract options
-   - Questions asking about preferences with limited set: "color favorito" → ["Rojo", "Azul", "Verde", "Amarillo"]
-   - Geographic binaries: "norte o sur", "north or south" → ["Norte", "Sur"]
-
-   EXAMPLES:
-   ❌ WRONG - Boolean question without options:
-   { "intent": "prompt_user", "question": "¿Quieres continuar?" }  ← Missing options!
-
-   ✅ RIGHT - Boolean with options:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] }
-
-   ❌ WRONG - Limited choices without options:
-   { "intent": "prompt_user", "question": "¿Eres del norte o del sur?" }  ← Missing options!
-
-   ✅ RIGHT - Limited choices with options:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Eres del norte o del sur?", "options": ["Norte", "Sur"] }
-
-   ✅ RIGHT - Open text (no options):
-   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" }  ← Text input OK
-   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }  ← Text input OK
-
-15. IF ACTION FOR CONDITIONAL LOGIC - CRITICAL: Use "if" action when execution depends on user choices:
-   - NEVER generate all actions upfront when some depend on conditions
-   - Use "if" action to branch based on runtime values (especially prompt_user responses)
-
-   STRUCTURE:
-   {
-     "intent": "if",
-     "condition": "\${actionId.output.answer} === 'expected value'",
-     "then": [ array of actions to execute if true ],
-     "else": [ array of actions to execute if false ]
-   }
-
-   EXAMPLES:
-   Prompt: "Ask if user wants to continue, if yes ask their age, if no say goodbye"
-
-   ✅ RIGHT - Using if action:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "intent": "if",
-     "condition": "\${a1.output.answer} === 'Sí'",
-     "then": [
-       { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
-       { "intent": "print", "message": "Tienes \${a2.output.answer} años" }
-     ],
-     "else": [
-       { "intent": "print", "message": "¡Hasta luego!" }
-     ]
-   }
-
-   ❌ WRONG - Generating all actions without conditional:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },  ← Always asks!
-   { "intent": "print", "message": "..." }
-
-16. CONDITIONAL "FINALLY" ACTIONS - CRITICAL: When playbook says "finalmente" (finally) with actions that depend on conditional data:
-   - ANALYZE: Does the "finally" action need data that only exists in the "then" branch?
-   - If YES: Put the "finally" action INSIDE the "then" branch, create appropriate alternative for "else"
-   - If NO: Put the "finally" action after the if statement
-
-   EXAMPLE SCENARIO:
-   Playbook: "Pregunta si quiere continuar, si quiere pregunta su edad. Finalmente saluda y bromea sobre su edad."
-   Translation: "Ask if they want to continue, if yes ask their age. Finally greet and joke about their age."
-
-   ANALYSIS: "bromea sobre su edad" (joke about age) needs age data, which only exists in "then" branch!
-
-   ✅ RIGHT - "Finally" action inside conditional:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
-   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "intent": "if",
-     "condition": "\${a2.output.answer} === 'Sí'",
-     "then": [
-       { "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
-       { "intent": "print", "message": "¡Hola \${a1.output.answer}! Tienes \${a3.output.answer} años, ¡qué joven!" }
-     ],
-     "else": [
-       { "intent": "print", "message": "¡Hasta luego, \${a1.output.answer}! Espero que tengas un gran día." }
-     ]
-   }
-
-   ❌ WRONG - "Finally" action outside conditional (will fail when user says "No"):
-   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
-   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "intent": "if",
-     "condition": "\${a2.output.answer} === 'Sí'",
-     "then": [{ "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }],
-     "else": []
-   },
-   { "intent": "print", "message": "¡Hola! Tienes \${a3.output.answer} años" }  ← a3 doesn't exist if user said "No"!
-
-${delegationNote}${teamDelegationNote}
-
-RESPONSE FORMAT (ALWAYS use this):
-{
+WHILE LOOP EXAMPLE:
+{ "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+{ "intent": "registry_set", "key": "last", "value": "\${a1.output.answer}" },
+{ "intent": "while",
+  "condition": { "llm_eval": true, "desc": "Processing your response", "instruction": "¿Continuar? (false si despedida)", "data": "\${a3.output.answer}" },
   "actions": [
-    { "actionType": "direct", "intent": "print", "message": "Display this to user" },
-    { "actionType": "direct", "intent": "return", "data": {...} }
+    { "id": "prev", "intent": "registry_get", "key": "last" },
+    { "id": "a2", "intent": "call_llm", "desc": "Thinking of next question", "data": {"answer":"\${prev.output.value}"}, "instruction": "Generate question related to answer" },
+    { "id": "a3", "intent": "prompt_user", "question": "\${a2.output.result}" },
+    { "intent": "registry_set", "key": "last", "value": "\${a3.output.answer}" },
+    { "intent": "print", "message": "Interesante: \${a3.output.answer}" }
   ]
 }
-
-CORRECT EXAMPLES:
-
-Example 1 - NEVER hardcode dynamic values (CRITICAL - Follow Rule #4):
-User prompt: "Create 2 users, then show 'X users created' where X is the count"
-❌ WRONG - Hardcoded count:
-{ "actionType": "direct", "intent": "print", "message": "✅ 2 users created" }
-
-✅ RIGHT - Dynamic count:
-{ "id": "a1", "actionType": "delegate", "intent": "createUser", "data": {...} },
-{ "id": "a2", "actionType": "delegate", "intent": "createUser", "data": {...} },
-{ "actionType": "direct", "intent": "print", "message": "✅ \${a1.output.success && a2.output.success ? 2 : (a1.output.success || a2.output.success ? 1 : 0)} users created" }
-
-Example 2 - Extracting names from natural language (CRITICAL - Follow Rule #6):
-User prompt: "Create Alice: id=001, age=30, email=alice@example.com"
-❌ WRONG - Missing name: { "data": { "id": "001", "age": 30, "email": "alice@example.com" } }
-✅ RIGHT - Include name: { "data": { "name": "Alice", "id": "001", "age": 30, "email": "alice@example.com" } }
-
-Example 3 - Delegate with ID:
-{
-  "actions": [
-    { "id": "a1", "actionType": "delegate", "intent": "getUser", "data": { "id": "001" } },
-    { "actionType": "direct", "intent": "print", "message": "User: \${a1.output.name}, age \${a1.output.age}" }
-  ]
-}
-
-Example 4 - Multiple actions with IDs:
-{
-  "actions": [
-    { "id": "a1", "actionType": "delegate", "intent": "listUsers" },
-    { "actionType": "direct", "intent": "print", "message": "Found \${a1.output.count} users" },
-    { "id": "a2", "actionType": "delegate", "intent": "getUser", "data": { "id": "001" } },
-    { "actionType": "direct", "intent": "print", "message": "First user: \${a2.output.name}" }
-  ]
-}
-
-Example 5 - Registry operations with IDs:
-{
-  "actions": [
-    { "id": "a1", "actionType": "direct", "intent": "registry_get", "key": "user:001" },
-    { "actionType": "direct", "intent": "print", "message": "Name: \${a1.output.value.name}" }
-  ]
-}
-
-Example 6 - Without IDs (when results aren't needed):
-{
-  "actions": [
-    { "actionType": "direct", "intent": "print", "message": "Hello" },
-    { "actionType": "delegate", "intent": "deleteUser", "data": { "id": "001" } },
-    { "actionType": "direct", "intent": "print", "message": "User deleted" }
-  ]
-}
-
-CRITICAL: ALWAYS include "actionType" field in EVERY action (either "direct" or "delegate")
+CRITICAL: condition.data MUST be the ID from prompt_user INSIDE the loop (a3), NOT from outside (a1)
 
 Available actions:
 ${actionRegistry.generatePromptDocumentation(agent)}
@@ -473,8 +373,8 @@ When using "return" actions with data containing template variables, do NOT add 
 REMEMBER: Include print actions for ALL output the user should see, UNLESS the instructions explicitly say not to. Return valid, parseable JSON only.`;
 
 
-    // Use fastest model for delegated work or short playbooks
-    const model = fromDelegation || promptLength < 500 ? 'gpt-4o-mini' : this.model;
+    // Use agent's configured model
+    const model = this.model;
 
     if (process.env.KOI_DEBUG_LLM) {
       const agentInfo = agent ? ` | Agent: ${agent.name}` : '';
@@ -489,22 +389,24 @@ REMEMBER: Include print actions for ALL output the user should see, UNLESS the i
       console.error('─'.repeat(80));
     }
 
-    const completion = await this.openai.chat.completions.create({
-      model,
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0, // Always use 0 for maximum determinism
-      max_tokens: this.maxTokens,
-      response_format: { type: "json_object" } // Force valid JSON responses
-    });
+    const completion = await this.openai.chat.completions.create(
+      this.buildApiParams({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0, // Always use 0 for maximum determinism
+        max_tokens: this.maxTokens,
+        response_format: { type: "json_object" } // Force valid JSON responses
+      })
+    );
 
     const content = completion.choices[0].message.content?.trim() || '';
 
@@ -646,8 +548,8 @@ You respond with valid JSON only. No markdown, no code blocks, no explanations.`
       { role: 'user', content: prompt }
     ];
 
-    // Use fastest model for delegated work or short prompts
-    const model = fromDelegation || promptLength < 500 ? 'gpt-4o-mini' : this.model;
+    // Use agent's configured model
+    const model = this.model;
 
     if (process.env.KOI_DEBUG_LLM) {
       const agentInfo = agent ? ` | Agent: ${agent.name}` : '';
@@ -663,15 +565,17 @@ You respond with valid JSON only. No markdown, no code blocks, no explanations.`
     }
 
     // Call OpenAI with tools
-    let completion = await this.openai.chat.completions.create({
-      model,
-      messages,
-      tools: openAITools,
-      tool_choice: 'auto',
-      temperature: 0, // Always use 0 for maximum determinism
-      max_tokens: this.maxTokens,
-      response_format: { type: "json_object" } // Force valid JSON responses
-    });
+    let completion = await this.openai.chat.completions.create(
+      this.buildApiParams({
+        model,
+        messages,
+        tools: openAITools,
+        tool_choice: 'auto',
+        temperature: 0, // Always use 0 for maximum determinism
+        max_tokens: this.maxTokens,
+        response_format: { type: "json_object" } // Force valid JSON responses
+      })
+    );
 
     let message = completion.choices[0].message;
 
@@ -726,13 +630,15 @@ You respond with valid JSON only. No markdown, no code blocks, no explanations.`
       }
 
       // Call OpenAI again with tool results
-      completion = await this.openai.chat.completions.create({
-        model,  // Use same model as initial call
-        messages,
-        temperature: 0, // Always use 0 for maximum determinism
-        max_tokens: this.maxTokens,
-        response_format: { type: "json_object" } // Force valid JSON responses
-      });
+      completion = await this.openai.chat.completions.create(
+        this.buildApiParams({
+          model,  // Use same model as initial call
+          messages,
+          temperature: 0, // Always use 0 for maximum determinism
+          max_tokens: this.maxTokens,
+          response_format: { type: "json_object" } // Force valid JSON responses
+        })
+      );
 
       message = completion.choices[0].message;
     }
@@ -760,324 +666,33 @@ You respond with valid JSON only. No markdown, no code blocks, no explanations.`
     // Check if agent has teams for delegation
     const hasTeams = agent && agent.usesTeams && agent.usesTeams.length > 0;
 
-    const systemPrompt = `You are a Koi agent executor. Your job is to convert user instructions into a precise sequence of executable actions.
+    const systemPrompt = `Convert playbook to JSON actions.
+
+OUTPUT: { "actions": [...] }
 
 CRITICAL RULES:
-1. Execute EVERY instruction in the user's request - do not skip any steps
-2. Return ONLY raw JSON - NO markdown, NO wrapping, NO "result" field
-3. Follow the EXACT order of instructions given by the user
-4. Use "print" actions to display ALL requested output to the user
-5. ALWAYS use valid JSON - all values must be proper JSON types (strings, numbers, objects, arrays, booleans, null)
-6. EFFICIENCY: Group consecutive print actions into a single print using \\n for line breaks
-   - WRONG: Three separate prints for header lines
-   - RIGHT: One print with "Line1\\nLine2\\nLine3"
-6b. EFFICIENCY - Batch Operations: When performing the same operation on multiple items, check if a batch/plural version exists:
-   - Look for plural intent names in available delegation actions: createAllUser/createAllUsers (batch) vs createUser (single)
-   - ❌ WRONG: Six separate createUser calls for 6 users
-   - ✅ RIGHT: One createAllUser call with array of all 6 users: { "actionType": "delegate", "intent": "createAllUser", "data": { "users": [{name: "Alice", id: "001", ...}, {name: "Bob", id: "002", ...}, ...] } }
-   - Apply this principle to ANY repeated operation where a batch version exists
-   - Benefits: Fewer network calls, better performance, cleaner action sequences
-7. ACTION IDs (OPTIONAL): Use "id" field ONLY when you need to reference the result later
-   - Add "id": "a1" only if you'll use \${a1.output} in a future action
-   - Actions without "id" won't save their output (use for print, one-time actions)
-   - Sequential IDs: a1, a2, a3, ... (only for actions that need saving)
-   - Example: { "id": "a1", "intent": "getUser" } → later use \${a1.output.name}
-8. CRITICAL - DYNAMIC/CREATIVE CONTENT GENERATION: Use format action when content must be generated based on analyzing data:
+1. Dynamic content (random/relacionado/based on) → call_llm FIRST, then use \${id.output.result}
+2. Loops: "hasta que se despida" → while with llm_eval condition
+3. Loop structure: initial question BEFORE while → registry_set BEFORE while → while loop (registry_get → call_llm → prompt_user → registry_set → print)
+4. IDs: Add "id" only when you'll reference \${id.output} later
+5. Template variables ONLY in strings: "text \${var}" not \${var}
+6. Group consecutive prints with \\n
+7. User feedback: Add "desc" field in English gerund form WITHOUT trailing dots. Make it natural and conversational, NOT technical/explicit (e.g., "Analyzing your response", "Processing your message", "Understanding what you said"). Avoid exposing implementation details. Animated spinner added automatically. If omitted, shows "Thinking"
 
-   A) DATE/AGE CALCULATIONS - If playbook has {age}, {días}, {dd/mm/yyyy} or date placeholders:
-      - NEVER generate template expressions with Date arithmetic
-      - MANDATORY: Use format action with the data array
-      - ❌ ABSOLUTELY WRONG: print with "\${2023 - new Date(birthdate).getFullYear()}"
-      - ✅ RIGHT: { "id": "formatted", "intent": "format", "data": "\${usersArray}", "instruction": "Calculate age from birthdate..." }
-
-   B) DYNAMIC VS STATIC CONTENT - CRITICAL DECISION:
-      Ask yourself: "Does this content need to ANALYZE/INTERPRET the variable value to decide what to say?"
-
-      → Just INSERTING a variable? Use print: { "intent": "print", "message": "Tu nombre es \${name}" }
-      → Need to ANALYZE the value? MANDATORY use format: { "intent": "format", "data": {...}, "instruction": "..." }
-
-      Content is DYNAMIC (MUST use format) when:
-      - Playbook says "bromea/joke", "personaliza/personalize", "comenta/comment", "genera/generate", "apropiado/appropriate"
-      - Content should VARY based on the value (different for 20 vs 80)
-      - Requires interpretation/analysis of the value to decide what to say
-
-      ❌ ABSOLUTELY WRONG - Hardcoding analyzed content (same message for ALL values):
-      Playbook: "bromea sobre su edad"
-      { "intent": "print", "message": "Tienes \${a3.output.answer} años, ¡no te preocupes, la edad es solo un número!" }
-      ↑ WRONG: Same joke for age 20, 50, and 80 - NOT analyzing the value!
-
-      ✅ CORRECT - Analyze value to generate appropriate content:
-      Playbook: "bromea sobre su edad"
-      { "id": "a4", "intent": "format", "data": { "nombre": "\${a1.output.answer}", "edad": "\${a3.output.answer}" }, "instruction": "Genera un saludo para {nombre} y una broma sobre {edad} años. La broma DEBE variar según la edad: diferente para joven (20), adulto (40), mayor (70)." },
-      { "intent": "print", "message": "\${a4.output.formatted}" }
-      ↑ CORRECT: Will generate different jokes for different ages!
-
-   C) COMPLEX TEMPLATES - Copy COMPLETE template from playbook to format instruction:
-      - Keep ALL conditional logic (e.g., "Estimado o Estimada si es chica, deducelo por el nombre")
-      - Preserve ALL line breaks/spacing (use \n in instruction string)
-      - Keep original language and exact wording
-      - Don't simplify, paraphrase, or omit any part
-9. NEVER use .map() or arrow functions with nested template literals in template variables:
-   - ❌ ABSOLUTELY WRONG: \${array.map(item => \`text \${item.field}\`).join('\\n')} (nested templates CANNOT be evaluated)
-   - ❌ WRONG: print with "\${users.map(u => \`| \${u.name} | \${u.age} |\`).join('\\n')}" (will print literal template string)
-   - ✅ MANDATORY: Use format action for ANY iteration over arrays
-   - For markdown tables: { "id": "aX", "intent": "format", "data": "\${arrayId.output.users}", "instruction": "Generate markdown table with columns: Sr/Sra (deduce from name), Name, Age. Include header row with | Sr/Sra | Name | Age | and separator |--------|------|-----|" }
-   - For lists: { "id": "aX", "intent": "format", "data": "\${arrayId.output.items}", "instruction": "Format each item as: - {name}: {description}" }
-   - Then print: { "intent": "print", "message": "\${aX.output.formatted}" }
-
-10. PROMPT_USER WITH OPTIONS - CRITICAL: Detect when questions have limited/boolean answers:
-   - ALWAYS analyze the question context to determine if it's boolean or has limited options
-   - Questions like "quiere continuar", "do you want", "yes or no", "acepta" → Use options: ["Sí", "No"] or ["Yes", "No"]
-   - Questions with 2-3 obvious choices → Use options array for interactive menu with arrow keys
-   - Questions asking for open text (name, age, description) → NO options (text input mode)
-
-   CRITICAL DETECTION RULES:
-   - Keywords that indicate boolean: "quiere", "desea", "acepta", "want", "do you", "would you", "continuar"
-   - Questions with "o" / "or" indicating choices: "norte o sur", "male or female" → Extract options
-   - Questions asking about preferences with limited set: "color favorito" → ["Rojo", "Azul", "Verde", "Amarillo"]
-   - Geographic binaries: "norte o sur", "north or south" → ["Norte", "Sur"]
-
-   EXAMPLES:
-   ❌ WRONG - Boolean question without options:
-   { "intent": "prompt_user", "question": "¿Quieres continuar?" }  ← Missing options!
-
-   ✅ RIGHT - Boolean with options:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] }
-
-   ❌ WRONG - Limited choices without options:
-   { "intent": "prompt_user", "question": "¿Eres del norte o del sur?" }  ← Missing options!
-
-   ✅ RIGHT - Limited choices with options:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Eres del norte o del sur?", "options": ["Norte", "Sur"] }
-
-   ✅ RIGHT - Open text (no options):
-   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" }  ← Text input OK
-   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }  ← Text input OK
-
-11. IF ACTION FOR CONDITIONAL LOGIC - CRITICAL: Use "if" action when execution depends on user choices:
-   - NEVER generate all actions upfront when some depend on conditions
-   - Use "if" action to branch based on runtime values (especially prompt_user responses)
-
-   STRUCTURE:
-   {
-     "intent": "if",
-     "condition": "\${actionId.output.answer} === 'expected value'",
-     "then": [ array of actions to execute if true ],
-     "else": [ array of actions to execute if false ]
-   }
-
-   EXAMPLES:
-   Prompt: "Ask if user wants to continue, if yes ask their age, if no say goodbye"
-
-   ✅ RIGHT - Using if action:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "intent": "if",
-     "condition": "\${a1.output.answer} === 'Sí'",
-     "then": [
-       { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
-       { "intent": "print", "message": "Tienes \${a2.output.answer} años" }
-     ],
-     "else": [
-       { "intent": "print", "message": "¡Hasta luego!" }
-     ]
-   }
-
-   ❌ WRONG - Generating all actions without conditional:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },  ← Always asks!
-   { "intent": "print", "message": "..." }
-
-16. CONDITIONAL "FINALLY" ACTIONS - CRITICAL: When playbook says "finalmente" (finally) with actions that depend on conditional data:
-   - ANALYZE: Does the "finally" action need data that only exists in the "then" branch?
-   - If YES: Put the "finally" action INSIDE the "then" branch, create appropriate alternative for "else"
-   - If NO: Put the "finally" action after the if statement
-
-   EXAMPLE SCENARIO:
-   Playbook: "Pregunta si quiere continuar, si quiere pregunta su edad. Finalmente saluda y bromea sobre su edad."
-   Translation: "Ask if they want to continue, if yes ask their age. Finally greet and joke about their age."
-
-   ANALYSIS: "bromea sobre su edad" (joke about age) needs age data, which only exists in "then" branch!
-
-   ✅ RIGHT - "Finally" action inside conditional:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
-   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "intent": "if",
-     "condition": "\${a2.output.answer} === 'Sí'",
-     "then": [
-       { "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
-       { "intent": "print", "message": "¡Hola \${a1.output.answer}! Tienes \${a3.output.answer} años, ¡qué joven!" }
-     ],
-     "else": [
-       { "intent": "print", "message": "¡Hasta luego, \${a1.output.answer}! Espero que tengas un gran día." }
-     ]
-   }
-
-   ❌ WRONG - "Finally" action outside conditional (will fail when user says "No"):
-   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
-   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "intent": "if",
-     "condition": "\${a2.output.answer} === 'Sí'",
-     "then": [{ "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }],
-     "else": []
-   },
-   { "intent": "print", "message": "¡Hola! Tienes \${a3.output.answer} años" }  ← a3 doesn't exist if user said "No"!
-
-17. ITERATION/LOOPS - CRITICAL: Use iteration actions when playbook requests repeating actions:
-
-   A) FIXED NUMBER OF ITERATIONS - Use "repeat" action:
-      Keywords: "X veces" (X times), "pregunta 3 veces", "ask 5 times", "repite N veces"
-
-      STRUCTURE:
-      {
-        "intent": "repeat",
-        "count": N,
-        "actions": [ array of actions to repeat ]
-      }
-
-      EXAMPLE:
-      Playbook: "Pregunta al usuario 3 veces por su edad"
-      {
-        "intent": "repeat",
-        "count": 3,
-        "actions": [
-          { "id": "a1", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
-          { "intent": "print", "message": "Respuesta \${iteration}: \${a1.output.answer}" }
-        ]
-      }
-
-   B) CONDITIONAL ITERATION - Use "while" action:
-      Keywords: "hasta que" (until), "mientras" (while), "keep asking until", "repeat while"
-
-      TWO TYPES OF CONDITIONS:
-
-      B1) SIMPLE CONDITIONS - Use string condition for EXACT comparisons:
-          When: Exact string/number match, specific value comparison
-          Examples: "hasta que diga 'stop'", "while count < 10", "until answer equals 'yes'"
-
-          STRUCTURE:
-          {
-            "intent": "while",
-            "condition": "\${actionId.output.answer} !== 'stop'",
-            "max_iterations": 50,
-            "actions": [ array of actions to repeat ]
-          }
-
-          EXAMPLE:
-          Playbook: "Habla con el usuario hasta que te diga 'hasta luego'"
-          {
-            "intent": "while",
-            "condition": "\${a1.output.answer} !== 'hasta luego'",
-            "max_iterations": 50,
-            "actions": [
-              { "id": "a1", "intent": "prompt_user", "question": "¿De qué quieres hablar? (escribe 'hasta luego' para salir)" },
-              { "intent": "print", "message": "Dijiste: \${a1.output.answer}" }
-            ]
-          }
-
-      B2) SEMANTIC CONDITIONS - Use object condition with llm_eval for INTERPRETATION:
-          When: Semantic meaning, multiple valid phrases, natural language understanding
-          Examples: "hasta que se despida" (could be "adiós", "chao", "hasta luego", "me voy")
-                   "while user wants to continue" (could be "sí", "claro", "dale", "ok")
-                   "until user seems frustrated" (needs sentiment analysis)
-
-          STRUCTURE:
-          {
-            "intent": "while",
-            "condition": {
-              "llm_eval": true,
-              "instruction": "Question for LLM to answer with true/false",
-              "data": "\${actionId.output.answer}"
-            },
-            "max_iterations": 50,
-            "actions": [ array of actions to repeat ]
-          }
-
-          EXAMPLE:
-          Playbook: "Habla con el usuario hasta que se despida"
-          {
-            "intent": "while",
-            "condition": {
-              "llm_eval": true,
-              "instruction": "¿El usuario se está despidiendo o quiere terminar la conversación?",
-              "data": "\${a1.output.answer}"
-            },
-            "max_iterations": 50,
-            "actions": [
-              { "id": "a1", "intent": "prompt_user", "question": "¿De qué quieres hablar?" },
-              { "intent": "print", "message": "Interesante: \${a1.output.answer}" }
-            ]
-          }
-          ↑ This will recognize "adiós", "chao", "hasta luego", "me voy", "ya me voy", etc.
-
-      DECISION RULE - Which type to use?
-      → Playbook mentions EXACT phrase ("hasta que diga 'stop'")? → Use B1 (simple condition)
-      → Playbook describes MEANING/INTENT ("hasta que se despida", "while user wants")? → Use B2 (semantic condition)
-
-      CRITICAL: The condition is evaluated BEFORE each iteration.
-      - For simple conditions: Use !== for "until" semantics (continue while NOT met)
-      - For semantic conditions: Frame instruction as "Is the stop condition met?" (returns true to STOP)
-
-RESPONSE FORMAT (ALWAYS use this):
-{
+WHILE LOOP EXAMPLE:
+{ "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+{ "intent": "registry_set", "key": "last", "value": "\${a1.output.answer}" },
+{ "intent": "while",
+  "condition": { "llm_eval": true, "desc": "Processing your response", "instruction": "¿Continuar? (false si despedida)", "data": "\${a3.output.answer}" },
   "actions": [
-    { "actionType": "direct", "intent": "print", "message": "Display this to user" },
-    { "actionType": "direct", "intent": "return", "data": {...} }
+    { "id": "prev", "intent": "registry_get", "key": "last" },
+    { "id": "a2", "intent": "call_llm", "desc": "Thinking of next question", "data": {"answer":"\${prev.output.value}"}, "instruction": "Generate question related to answer" },
+    { "id": "a3", "intent": "prompt_user", "question": "\${a2.output.result}" },
+    { "intent": "registry_set", "key": "last", "value": "\${a3.output.answer}" },
+    { "intent": "print", "message": "Interesante: \${a3.output.answer}" }
   ]
 }
-
-CORRECT EXAMPLES:
-
-Example 1 - NEVER hardcode dynamic values (CRITICAL - Follow Rule #4):
-User prompt: "Create 2 users, then show 'X users created' where X is the count"
-❌ WRONG - Hardcoded count:
-{ "actionType": "direct", "intent": "print", "message": "✅ 2 users created" }
-
-✅ RIGHT - Dynamic count:
-{ "id": "a1", "actionType": "delegate", "intent": "createUser", "data": {...} },
-{ "id": "a2", "actionType": "delegate", "intent": "createUser", "data": {...} },
-{ "actionType": "direct", "intent": "print", "message": "✅ \${a1.output.success && a2.output.success ? 2 : (a1.output.success || a2.output.success ? 1 : 0)} users created" }
-
-Example 2 - Extracting names from natural language (CRITICAL - Follow Rule #6):
-User prompt: "Create Alice: id=001, age=30, email=alice@example.com"
-❌ WRONG - Missing name: { "data": { "id": "001", "age": 30, "email": "alice@example.com" } }
-✅ RIGHT - Include name: { "data": { "name": "Alice", "id": "001", "age": 30, "email": "alice@example.com" } }
-
-Example 3 - Delegate with ID:
-{
-  "actions": [
-    { "id": "a1", "actionType": "delegate", "intent": "getUser", "data": { "id": "001" } },
-    { "actionType": "direct", "intent": "print", "message": "User: \${a1.output.name}, age \${a1.output.age}" }
-  ]
-}
-
-Example 4 - Multiple actions with IDs:
-{
-  "actions": [
-    { "id": "a1", "actionType": "delegate", "intent": "listUsers" },
-    { "actionType": "direct", "intent": "print", "message": "Found \${a1.output.count} users" },
-    { "id": "a2", "actionType": "delegate", "intent": "getUser", "data": { "id": "001" } },
-    { "actionType": "direct", "intent": "print", "message": "First user: \${a2.output.name}" }
-  ]
-}
-
-Example 5 - Registry operations with IDs:
-{
-  "actions": [
-    { "id": "a1", "actionType": "direct", "intent": "registry_get", "key": "user:001" },
-    { "actionType": "direct", "intent": "print", "message": "Name: \${a1.output.value.name}" }
-  ]
-}
-
-Example 6 - Without IDs (when results aren't needed):
-{
-  "actions": [
-    { "actionType": "direct", "intent": "print", "message": "Hello" },
-    { "actionType": "delegate", "intent": "deleteUser", "data": { "id": "001" } },
-    { "actionType": "direct", "intent": "print", "message": "User deleted" }
-  ]
-}
-
-CRITICAL: ALWAYS include "actionType" field in EVERY action (either "direct" or "delegate")
+CRITICAL: condition.data MUST be the ID from prompt_user INSIDE the loop (a3), NOT from outside (a1)
 
 Available actions:
 ${actionRegistry.generatePromptDocumentation(agent)}
@@ -1135,324 +750,33 @@ REMEMBER: Include print actions for ALL output the user should see, UNLESS the i
     }
 
     // Build system prompt
-    const systemPrompt = `You are a Koi agent executor. Your job is to convert user instructions into a precise sequence of executable actions.
+    const systemPrompt = `Convert playbook to JSON actions.
+
+OUTPUT: { "actions": [...] }
 
 CRITICAL RULES:
-1. Execute EVERY instruction in the user's request - do not skip any steps
-2. Return ONLY raw JSON - NO markdown, NO wrapping, NO "result" field
-3. Follow the EXACT order of instructions given by the user
-4. Use "print" actions to display ALL requested output to the user
-5. ALWAYS use valid JSON - all values must be proper JSON types (strings, numbers, objects, arrays, booleans, null)
-6. EFFICIENCY: Group consecutive print actions into a single print using \\n for line breaks
-   - WRONG: Three separate prints for header lines
-   - RIGHT: One print with "Line1\\nLine2\\nLine3"
-6b. EFFICIENCY - Batch Operations: When performing the same operation on multiple items, check if a batch/plural version exists:
-   - Look for plural intent names in available delegation actions: createAllUser/createAllUsers (batch) vs createUser (single)
-   - ❌ WRONG: Six separate createUser calls for 6 users
-   - ✅ RIGHT: One createAllUser call with array of all 6 users: { "actionType": "delegate", "intent": "createAllUser", "data": { "users": [{name: "Alice", id: "001", ...}, {name: "Bob", id: "002", ...}, ...] } }
-   - Apply this principle to ANY repeated operation where a batch version exists
-   - Benefits: Fewer network calls, better performance, cleaner action sequences
-7. ACTION IDs (OPTIONAL): Use "id" field ONLY when you need to reference the result later
-   - Add "id": "a1" only if you'll use \${a1.output} in a future action
-   - Actions without "id" won't save their output (use for print, one-time actions)
-   - Sequential IDs: a1, a2, a3, ... (only for actions that need saving)
-   - Example: { "id": "a1", "intent": "getUser" } → later use \${a1.output.name}
-8. CRITICAL - DYNAMIC/CREATIVE CONTENT GENERATION: Use format action when content must be generated based on analyzing data:
+1. Dynamic content (random/relacionado/based on) → call_llm FIRST, then use \${id.output.result}
+2. Loops: "hasta que se despida" → while with llm_eval condition
+3. Loop structure: initial question BEFORE while → registry_set BEFORE while → while loop (registry_get → call_llm → prompt_user → registry_set → print)
+4. IDs: Add "id" only when you'll reference \${id.output} later
+5. Template variables ONLY in strings: "text \${var}" not \${var}
+6. Group consecutive prints with \\n
+7. User feedback: Add "desc" field in English gerund form WITHOUT trailing dots. Make it natural and conversational, NOT technical/explicit (e.g., "Analyzing your response", "Processing your message", "Understanding what you said"). Avoid exposing implementation details. Animated spinner added automatically. If omitted, shows "Thinking"
 
-   A) DATE/AGE CALCULATIONS - If playbook has {age}, {días}, {dd/mm/yyyy} or date placeholders:
-      - NEVER generate template expressions with Date arithmetic
-      - MANDATORY: Use format action with the data array
-      - ❌ ABSOLUTELY WRONG: print with "\${2023 - new Date(birthdate).getFullYear()}"
-      - ✅ RIGHT: { "id": "formatted", "intent": "format", "data": "\${usersArray}", "instruction": "Calculate age from birthdate..." }
-
-   B) DYNAMIC VS STATIC CONTENT - CRITICAL DECISION:
-      Ask yourself: "Does this content need to ANALYZE/INTERPRET the variable value to decide what to say?"
-
-      → Just INSERTING a variable? Use print: { "intent": "print", "message": "Tu nombre es \${name}" }
-      → Need to ANALYZE the value? MANDATORY use format: { "intent": "format", "data": {...}, "instruction": "..." }
-
-      Content is DYNAMIC (MUST use format) when:
-      - Playbook says "bromea/joke", "personaliza/personalize", "comenta/comment", "genera/generate", "apropiado/appropriate"
-      - Content should VARY based on the value (different for 20 vs 80)
-      - Requires interpretation/analysis of the value to decide what to say
-
-      ❌ ABSOLUTELY WRONG - Hardcoding analyzed content (same message for ALL values):
-      Playbook: "bromea sobre su edad"
-      { "intent": "print", "message": "Tienes \${a3.output.answer} años, ¡no te preocupes, la edad es solo un número!" }
-      ↑ WRONG: Same joke for age 20, 50, and 80 - NOT analyzing the value!
-
-      ✅ CORRECT - Analyze value to generate appropriate content:
-      Playbook: "bromea sobre su edad"
-      { "id": "a4", "intent": "format", "data": { "nombre": "\${a1.output.answer}", "edad": "\${a3.output.answer}" }, "instruction": "Genera un saludo para {nombre} y una broma sobre {edad} años. La broma DEBE variar según la edad: diferente para joven (20), adulto (40), mayor (70)." },
-      { "intent": "print", "message": "\${a4.output.formatted}" }
-      ↑ CORRECT: Will generate different jokes for different ages!
-
-   C) COMPLEX TEMPLATES - Copy COMPLETE template from playbook to format instruction:
-      - Keep ALL conditional logic (e.g., "Estimado o Estimada si es chica, deducelo por el nombre")
-      - Preserve ALL line breaks/spacing (use \n in instruction string)
-      - Keep original language and exact wording
-      - Don't simplify, paraphrase, or omit any part
-9. NEVER use .map() or arrow functions with nested template literals in template variables:
-   - ❌ ABSOLUTELY WRONG: \${array.map(item => \`text \${item.field}\`).join('\\n')} (nested templates CANNOT be evaluated)
-   - ❌ WRONG: print with "\${users.map(u => \`| \${u.name} | \${u.age} |\`).join('\\n')}" (will print literal template string)
-   - ✅ MANDATORY: Use format action for ANY iteration over arrays
-   - For markdown tables: { "id": "aX", "intent": "format", "data": "\${arrayId.output.users}", "instruction": "Generate markdown table with columns: Sr/Sra (deduce from name), Name, Age. Include header row with | Sr/Sra | Name | Age | and separator |--------|------|-----|" }
-   - For lists: { "id": "aX", "intent": "format", "data": "\${arrayId.output.items}", "instruction": "Format each item as: - {name}: {description}" }
-   - Then print: { "intent": "print", "message": "\${aX.output.formatted}" }
-
-10. PROMPT_USER WITH OPTIONS - CRITICAL: Detect when questions have limited/boolean answers:
-   - ALWAYS analyze the question context to determine if it's boolean or has limited options
-   - Questions like "quiere continuar", "do you want", "yes or no", "acepta" → Use options: ["Sí", "No"] or ["Yes", "No"]
-   - Questions with 2-3 obvious choices → Use options array for interactive menu with arrow keys
-   - Questions asking for open text (name, age, description) → NO options (text input mode)
-
-   CRITICAL DETECTION RULES:
-   - Keywords that indicate boolean: "quiere", "desea", "acepta", "want", "do you", "would you", "continuar"
-   - Questions with "o" / "or" indicating choices: "norte o sur", "male or female" → Extract options
-   - Questions asking about preferences with limited set: "color favorito" → ["Rojo", "Azul", "Verde", "Amarillo"]
-   - Geographic binaries: "norte o sur", "north or south" → ["Norte", "Sur"]
-
-   EXAMPLES:
-   ❌ WRONG - Boolean question without options:
-   { "intent": "prompt_user", "question": "¿Quieres continuar?" }  ← Missing options!
-
-   ✅ RIGHT - Boolean with options:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] }
-
-   ❌ WRONG - Limited choices without options:
-   { "intent": "prompt_user", "question": "¿Eres del norte o del sur?" }  ← Missing options!
-
-   ✅ RIGHT - Limited choices with options:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Eres del norte o del sur?", "options": ["Norte", "Sur"] }
-
-   ✅ RIGHT - Open text (no options):
-   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" }  ← Text input OK
-   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }  ← Text input OK
-
-11. IF ACTION FOR CONDITIONAL LOGIC - CRITICAL: Use "if" action when execution depends on user choices:
-   - NEVER generate all actions upfront when some depend on conditions
-   - Use "if" action to branch based on runtime values (especially prompt_user responses)
-
-   STRUCTURE:
-   {
-     "intent": "if",
-     "condition": "\${actionId.output.answer} === 'expected value'",
-     "then": [ array of actions to execute if true ],
-     "else": [ array of actions to execute if false ]
-   }
-
-   EXAMPLES:
-   Prompt: "Ask if user wants to continue, if yes ask their age, if no say goodbye"
-
-   ✅ RIGHT - Using if action:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "intent": "if",
-     "condition": "\${a1.output.answer} === 'Sí'",
-     "then": [
-       { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
-       { "intent": "print", "message": "Tienes \${a2.output.answer} años" }
-     ],
-     "else": [
-       { "intent": "print", "message": "¡Hasta luego!" }
-     ]
-   }
-
-   ❌ WRONG - Generating all actions without conditional:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },  ← Always asks!
-   { "intent": "print", "message": "..." }
-
-16. CONDITIONAL "FINALLY" ACTIONS - CRITICAL: When playbook says "finalmente" (finally) with actions that depend on conditional data:
-   - ANALYZE: Does the "finally" action need data that only exists in the "then" branch?
-   - If YES: Put the "finally" action INSIDE the "then" branch, create appropriate alternative for "else"
-   - If NO: Put the "finally" action after the if statement
-
-   EXAMPLE SCENARIO:
-   Playbook: "Pregunta si quiere continuar, si quiere pregunta su edad. Finalmente saluda y bromea sobre su edad."
-   Translation: "Ask if they want to continue, if yes ask their age. Finally greet and joke about their age."
-
-   ANALYSIS: "bromea sobre su edad" (joke about age) needs age data, which only exists in "then" branch!
-
-   ✅ RIGHT - "Finally" action inside conditional:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
-   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "intent": "if",
-     "condition": "\${a2.output.answer} === 'Sí'",
-     "then": [
-       { "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
-       { "intent": "print", "message": "¡Hola \${a1.output.answer}! Tienes \${a3.output.answer} años, ¡qué joven!" }
-     ],
-     "else": [
-       { "intent": "print", "message": "¡Hasta luego, \${a1.output.answer}! Espero que tengas un gran día." }
-     ]
-   }
-
-   ❌ WRONG - "Finally" action outside conditional (will fail when user says "No"):
-   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
-   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "intent": "if",
-     "condition": "\${a2.output.answer} === 'Sí'",
-     "then": [{ "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }],
-     "else": []
-   },
-   { "intent": "print", "message": "¡Hola! Tienes \${a3.output.answer} años" }  ← a3 doesn't exist if user said "No"!
-
-17. ITERATION/LOOPS - CRITICAL: Use iteration actions when playbook requests repeating actions:
-
-   A) FIXED NUMBER OF ITERATIONS - Use "repeat" action:
-      Keywords: "X veces" (X times), "pregunta 3 veces", "ask 5 times", "repite N veces"
-
-      STRUCTURE:
-      {
-        "intent": "repeat",
-        "count": N,
-        "actions": [ array of actions to repeat ]
-      }
-
-      EXAMPLE:
-      Playbook: "Pregunta al usuario 3 veces por su edad"
-      {
-        "intent": "repeat",
-        "count": 3,
-        "actions": [
-          { "id": "a1", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
-          { "intent": "print", "message": "Respuesta \${iteration}: \${a1.output.answer}" }
-        ]
-      }
-
-   B) CONDITIONAL ITERATION - Use "while" action:
-      Keywords: "hasta que" (until), "mientras" (while), "keep asking until", "repeat while"
-
-      TWO TYPES OF CONDITIONS:
-
-      B1) SIMPLE CONDITIONS - Use string condition for EXACT comparisons:
-          When: Exact string/number match, specific value comparison
-          Examples: "hasta que diga 'stop'", "while count < 10", "until answer equals 'yes'"
-
-          STRUCTURE:
-          {
-            "intent": "while",
-            "condition": "\${actionId.output.answer} !== 'stop'",
-            "max_iterations": 50,
-            "actions": [ array of actions to repeat ]
-          }
-
-          EXAMPLE:
-          Playbook: "Habla con el usuario hasta que te diga 'hasta luego'"
-          {
-            "intent": "while",
-            "condition": "\${a1.output.answer} !== 'hasta luego'",
-            "max_iterations": 50,
-            "actions": [
-              { "id": "a1", "intent": "prompt_user", "question": "¿De qué quieres hablar? (escribe 'hasta luego' para salir)" },
-              { "intent": "print", "message": "Dijiste: \${a1.output.answer}" }
-            ]
-          }
-
-      B2) SEMANTIC CONDITIONS - Use object condition with llm_eval for INTERPRETATION:
-          When: Semantic meaning, multiple valid phrases, natural language understanding
-          Examples: "hasta que se despida" (could be "adiós", "chao", "hasta luego", "me voy")
-                   "while user wants to continue" (could be "sí", "claro", "dale", "ok")
-                   "until user seems frustrated" (needs sentiment analysis)
-
-          STRUCTURE:
-          {
-            "intent": "while",
-            "condition": {
-              "llm_eval": true,
-              "instruction": "Question for LLM to answer with true/false",
-              "data": "\${actionId.output.answer}"
-            },
-            "max_iterations": 50,
-            "actions": [ array of actions to repeat ]
-          }
-
-          EXAMPLE:
-          Playbook: "Habla con el usuario hasta que se despida"
-          {
-            "intent": "while",
-            "condition": {
-              "llm_eval": true,
-              "instruction": "¿El usuario se está despidiendo o quiere terminar la conversación?",
-              "data": "\${a1.output.answer}"
-            },
-            "max_iterations": 50,
-            "actions": [
-              { "id": "a1", "intent": "prompt_user", "question": "¿De qué quieres hablar?" },
-              { "intent": "print", "message": "Interesante: \${a1.output.answer}" }
-            ]
-          }
-          ↑ This will recognize "adiós", "chao", "hasta luego", "me voy", "ya me voy", etc.
-
-      DECISION RULE - Which type to use?
-      → Playbook mentions EXACT phrase ("hasta que diga 'stop'")? → Use B1 (simple condition)
-      → Playbook describes MEANING/INTENT ("hasta que se despida", "while user wants")? → Use B2 (semantic condition)
-
-      CRITICAL: The condition is evaluated BEFORE each iteration.
-      - For simple conditions: Use !== for "until" semantics (continue while NOT met)
-      - For semantic conditions: Frame instruction as "Is the stop condition met?" (returns true to STOP)
-
-RESPONSE FORMAT (ALWAYS use this):
-{
+WHILE LOOP EXAMPLE:
+{ "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+{ "intent": "registry_set", "key": "last", "value": "\${a1.output.answer}" },
+{ "intent": "while",
+  "condition": { "llm_eval": true, "desc": "Processing your response", "instruction": "¿Continuar? (false si despedida)", "data": "\${a3.output.answer}" },
   "actions": [
-    { "actionType": "direct", "intent": "print", "message": "Display this to user" },
-    { "actionType": "direct", "intent": "return", "data": {...} }
+    { "id": "prev", "intent": "registry_get", "key": "last" },
+    { "id": "a2", "intent": "call_llm", "desc": "Thinking of next question", "data": {"answer":"\${prev.output.value}"}, "instruction": "Generate question related to answer" },
+    { "id": "a3", "intent": "prompt_user", "question": "\${a2.output.result}" },
+    { "intent": "registry_set", "key": "last", "value": "\${a3.output.answer}" },
+    { "intent": "print", "message": "Interesante: \${a3.output.answer}" }
   ]
 }
-
-CORRECT EXAMPLES:
-
-Example 1 - NEVER hardcode dynamic values (CRITICAL - Follow Rule #4):
-User prompt: "Create 2 users, then show 'X users created' where X is the count"
-❌ WRONG - Hardcoded count:
-{ "actionType": "direct", "intent": "print", "message": "✅ 2 users created" }
-
-✅ RIGHT - Dynamic count:
-{ "id": "a1", "actionType": "delegate", "intent": "createUser", "data": {...} },
-{ "id": "a2", "actionType": "delegate", "intent": "createUser", "data": {...} },
-{ "actionType": "direct", "intent": "print", "message": "✅ \${a1.output.success && a2.output.success ? 2 : (a1.output.success || a2.output.success ? 1 : 0)} users created" }
-
-Example 2 - Extracting names from natural language (CRITICAL - Follow Rule #6):
-User prompt: "Create Alice: id=001, age=30, email=alice@example.com"
-❌ WRONG - Missing name: { "data": { "id": "001", "age": 30, "email": "alice@example.com" } }
-✅ RIGHT - Include name: { "data": { "name": "Alice", "id": "001", "age": 30, "email": "alice@example.com" } }
-
-Example 3 - Delegate with ID:
-{
-  "actions": [
-    { "id": "a1", "actionType": "delegate", "intent": "getUser", "data": { "id": "001" } },
-    { "actionType": "direct", "intent": "print", "message": "User: \${a1.output.name}, age \${a1.output.age}" }
-  ]
-}
-
-Example 4 - Multiple actions with IDs:
-{
-  "actions": [
-    { "id": "a1", "actionType": "delegate", "intent": "listUsers" },
-    { "actionType": "direct", "intent": "print", "message": "Found \${a1.output.count} users" },
-    { "id": "a2", "actionType": "delegate", "intent": "getUser", "data": { "id": "001" } },
-    { "actionType": "direct", "intent": "print", "message": "First user: \${a2.output.name}" }
-  ]
-}
-
-Example 5 - Registry operations with IDs:
-{
-  "actions": [
-    { "id": "a1", "actionType": "direct", "intent": "registry_get", "key": "user:001" },
-    { "actionType": "direct", "intent": "print", "message": "Name: \${a1.output.value.name}" }
-  ]
-}
-
-Example 6 - Without IDs (when results aren't needed):
-{
-  "actions": [
-    { "actionType": "direct", "intent": "print", "message": "Hello" },
-    { "actionType": "delegate", "intent": "deleteUser", "data": { "id": "001" } },
-    { "actionType": "direct", "intent": "print", "message": "User deleted" }
-  ]
-}
-
-CRITICAL: ALWAYS include "actionType" field in EVERY action (either "direct" or "delegate")
+CRITICAL: condition.data MUST be the ID from prompt_user INSIDE the loop (a3), NOT from outside (a1)
 
 Available actions:
 ${actionRegistry.generatePromptDocumentation(agent)}
@@ -1478,8 +802,8 @@ When using "return" actions with data containing template variables, do NOT add 
 
 REMEMBER: Include print actions for ALL output the user should see, UNLESS the instructions explicitly say not to. Return valid, parseable JSON only.`;
 
-    // Use fastest model for delegated work or short playbooks
-    const model = fromDelegation || promptLength < 500 ? 'gpt-4o-mini' : this.model;
+    // Use agent's configured model
+    const model = this.model;
 
     if (process.env.KOI_DEBUG_LLM) {
       const agentInfo = agent ? ` | Agent: ${agent.name}` : '';
@@ -1495,17 +819,19 @@ REMEMBER: Include print actions for ALL output the user should see, UNLESS the i
     }
 
     // Create streaming completion
-    const stream = await this.openai.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt }
-      ],
-      temperature: 0,
-      max_tokens: this.maxTokens,
-      stream: true,  // Enable streaming
-      response_format: { type: "json_object" }
-    });
+    const stream = await this.openai.chat.completions.create(
+      this.buildApiParams({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0,
+        max_tokens: this.maxTokens,
+        stream: true,  // Enable streaming
+        response_format: { type: "json_object" }
+      })
+    );
 
     // Use incremental parser
     const parser = new IncrementalJSONParser();
@@ -1607,6 +933,19 @@ REMEMBER: Include print actions for ALL output the user should see, UNLESS the i
       actionQueue.push(...finalActions);
     }
 
+    // Print response immediately after receiving it
+    if (process.env.KOI_DEBUG_LLM) {
+      console.error(`\n[LLM Debug] executeOpenAIStreaming Complete (${fullContent.length} chars)`);
+      console.error('─'.repeat(80));
+      console.error('[LLM Debug] Response:');
+      // Format each line with < prefix and gray color
+      const lines = fullContent.split('\n');
+      for (const line of lines) {
+        console.error(`< \x1b[90m${line}\x1b[0m`);
+      }
+      console.error('─'.repeat(80));
+    }
+
     // Esperar a que se procesen todas las acciones en la cola
     if (processingPromise) {
       await processingPromise;
@@ -1620,18 +959,6 @@ REMEMBER: Include print actions for ALL output the user should see, UNLESS the i
     // Si hubo error durante el procesamiento, lanzarlo ahora
     if (processingError) {
       throw processingError;
-    }
-
-    if (process.env.KOI_DEBUG_LLM) {
-      console.error(`[LLM Debug] executeOpenAIStreaming Complete (${fullContent.length} chars)`);
-      console.error('─'.repeat(80));
-      console.error('[LLM Debug] Response:');
-      // Format each line with < prefix and gray color
-      const lines = fullContent.split('\n');
-      for (const line of lines) {
-        console.error(`< \x1b[90m${line}\x1b[0m`);
-      }
-      console.error('─'.repeat(80));
     }
 
     return fullContent;
@@ -1652,324 +979,33 @@ REMEMBER: Include print actions for ALL output the user should see, UNLESS the i
     // Check if agent has teams for delegation
     const hasTeams = agent && agent.usesTeams && agent.usesTeams.length > 0;
 
-    const systemPrompt = `You are a Koi agent executor. Your job is to convert user instructions into a precise sequence of executable actions.
+    const systemPrompt = `Convert playbook to JSON actions.
+
+OUTPUT: { "actions": [...] }
 
 CRITICAL RULES:
-1. Execute EVERY instruction in the user's request - do not skip any steps
-2. Return ONLY raw JSON - NO markdown, NO wrapping, NO "result" field
-3. Follow the EXACT order of instructions given by the user
-4. Use "print" actions to display ALL requested output to the user
-5. ALWAYS use valid JSON - all values must be proper JSON types (strings, numbers, objects, arrays, booleans, null)
-6. EFFICIENCY: Group consecutive print actions into a single print using \\n for line breaks
-   - WRONG: Three separate prints for header lines
-   - RIGHT: One print with "Line1\\nLine2\\nLine3"
-6b. EFFICIENCY - Batch Operations: When performing the same operation on multiple items, check if a batch/plural version exists:
-   - Look for plural intent names in available delegation actions: createAllUser/createAllUsers (batch) vs createUser (single)
-   - ❌ WRONG: Six separate createUser calls for 6 users
-   - ✅ RIGHT: One createAllUser call with array of all 6 users: { "actionType": "delegate", "intent": "createAllUser", "data": { "users": [{name: "Alice", id: "001", ...}, {name: "Bob", id: "002", ...}, ...] } }
-   - Apply this principle to ANY repeated operation where a batch version exists
-   - Benefits: Fewer network calls, better performance, cleaner action sequences
-7. ACTION IDs (OPTIONAL): Use "id" field ONLY when you need to reference the result later
-   - Add "id": "a1" only if you'll use \${a1.output} in a future action
-   - Actions without "id" won't save their output (use for print, one-time actions)
-   - Sequential IDs: a1, a2, a3, ... (only for actions that need saving)
-   - Example: { "id": "a1", "intent": "getUser" } → later use \${a1.output.name}
-8. CRITICAL - DYNAMIC/CREATIVE CONTENT GENERATION: Use format action when content must be generated based on analyzing data:
+1. Dynamic content (random/relacionado/based on) → call_llm FIRST, then use \${id.output.result}
+2. Loops: "hasta que se despida" → while with llm_eval condition
+3. Loop structure: initial question BEFORE while → registry_set BEFORE while → while loop (registry_get → call_llm → prompt_user → registry_set → print)
+4. IDs: Add "id" only when you'll reference \${id.output} later
+5. Template variables ONLY in strings: "text \${var}" not \${var}
+6. Group consecutive prints with \\n
+7. User feedback: Add "desc" field in English gerund form WITHOUT trailing dots. Make it natural and conversational, NOT technical/explicit (e.g., "Analyzing your response", "Processing your message", "Understanding what you said"). Avoid exposing implementation details. Animated spinner added automatically. If omitted, shows "Thinking"
 
-   A) DATE/AGE CALCULATIONS - If playbook has {age}, {días}, {dd/mm/yyyy} or date placeholders:
-      - NEVER generate template expressions with Date arithmetic
-      - MANDATORY: Use format action with the data array
-      - ❌ ABSOLUTELY WRONG: print with "\${2023 - new Date(birthdate).getFullYear()}"
-      - ✅ RIGHT: { "id": "formatted", "intent": "format", "data": "\${usersArray}", "instruction": "Calculate age from birthdate..." }
-
-   B) DYNAMIC VS STATIC CONTENT - CRITICAL DECISION:
-      Ask yourself: "Does this content need to ANALYZE/INTERPRET the variable value to decide what to say?"
-
-      → Just INSERTING a variable? Use print: { "intent": "print", "message": "Tu nombre es \${name}" }
-      → Need to ANALYZE the value? MANDATORY use format: { "intent": "format", "data": {...}, "instruction": "..." }
-
-      Content is DYNAMIC (MUST use format) when:
-      - Playbook says "bromea/joke", "personaliza/personalize", "comenta/comment", "genera/generate", "apropiado/appropriate"
-      - Content should VARY based on the value (different for 20 vs 80)
-      - Requires interpretation/analysis of the value to decide what to say
-
-      ❌ ABSOLUTELY WRONG - Hardcoding analyzed content (same message for ALL values):
-      Playbook: "bromea sobre su edad"
-      { "intent": "print", "message": "Tienes \${a3.output.answer} años, ¡no te preocupes, la edad es solo un número!" }
-      ↑ WRONG: Same joke for age 20, 50, and 80 - NOT analyzing the value!
-
-      ✅ CORRECT - Analyze value to generate appropriate content:
-      Playbook: "bromea sobre su edad"
-      { "id": "a4", "intent": "format", "data": { "nombre": "\${a1.output.answer}", "edad": "\${a3.output.answer}" }, "instruction": "Genera un saludo para {nombre} y una broma sobre {edad} años. La broma DEBE variar según la edad: diferente para joven (20), adulto (40), mayor (70)." },
-      { "intent": "print", "message": "\${a4.output.formatted}" }
-      ↑ CORRECT: Will generate different jokes for different ages!
-
-   C) COMPLEX TEMPLATES - Copy COMPLETE template from playbook to format instruction:
-      - Keep ALL conditional logic (e.g., "Estimado o Estimada si es chica, deducelo por el nombre")
-      - Preserve ALL line breaks/spacing (use \n in instruction string)
-      - Keep original language and exact wording
-      - Don't simplify, paraphrase, or omit any part
-9. NEVER use .map() or arrow functions with nested template literals in template variables:
-   - ❌ ABSOLUTELY WRONG: \${array.map(item => \`text \${item.field}\`).join('\\n')} (nested templates CANNOT be evaluated)
-   - ❌ WRONG: print with "\${users.map(u => \`| \${u.name} | \${u.age} |\`).join('\\n')}" (will print literal template string)
-   - ✅ MANDATORY: Use format action for ANY iteration over arrays
-   - For markdown tables: { "id": "aX", "intent": "format", "data": "\${arrayId.output.users}", "instruction": "Generate markdown table with columns: Sr/Sra (deduce from name), Name, Age. Include header row with | Sr/Sra | Name | Age | and separator |--------|------|-----|" }
-   - For lists: { "id": "aX", "intent": "format", "data": "\${arrayId.output.items}", "instruction": "Format each item as: - {name}: {description}" }
-   - Then print: { "intent": "print", "message": "\${aX.output.formatted}" }
-
-10. PROMPT_USER WITH OPTIONS - CRITICAL: Detect when questions have limited/boolean answers:
-   - ALWAYS analyze the question context to determine if it's boolean or has limited options
-   - Questions like "quiere continuar", "do you want", "yes or no", "acepta" → Use options: ["Sí", "No"] or ["Yes", "No"]
-   - Questions with 2-3 obvious choices → Use options array for interactive menu with arrow keys
-   - Questions asking for open text (name, age, description) → NO options (text input mode)
-
-   CRITICAL DETECTION RULES:
-   - Keywords that indicate boolean: "quiere", "desea", "acepta", "want", "do you", "would you", "continuar"
-   - Questions with "o" / "or" indicating choices: "norte o sur", "male or female" → Extract options
-   - Questions asking about preferences with limited set: "color favorito" → ["Rojo", "Azul", "Verde", "Amarillo"]
-   - Geographic binaries: "norte o sur", "north or south" → ["Norte", "Sur"]
-
-   EXAMPLES:
-   ❌ WRONG - Boolean question without options:
-   { "intent": "prompt_user", "question": "¿Quieres continuar?" }  ← Missing options!
-
-   ✅ RIGHT - Boolean with options:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] }
-
-   ❌ WRONG - Limited choices without options:
-   { "intent": "prompt_user", "question": "¿Eres del norte o del sur?" }  ← Missing options!
-
-   ✅ RIGHT - Limited choices with options:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Eres del norte o del sur?", "options": ["Norte", "Sur"] }
-
-   ✅ RIGHT - Open text (no options):
-   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" }  ← Text input OK
-   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }  ← Text input OK
-
-11. IF ACTION FOR CONDITIONAL LOGIC - CRITICAL: Use "if" action when execution depends on user choices:
-   - NEVER generate all actions upfront when some depend on conditions
-   - Use "if" action to branch based on runtime values (especially prompt_user responses)
-
-   STRUCTURE:
-   {
-     "intent": "if",
-     "condition": "\${actionId.output.answer} === 'expected value'",
-     "then": [ array of actions to execute if true ],
-     "else": [ array of actions to execute if false ]
-   }
-
-   EXAMPLES:
-   Prompt: "Ask if user wants to continue, if yes ask their age, if no say goodbye"
-
-   ✅ RIGHT - Using if action:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "intent": "if",
-     "condition": "\${a1.output.answer} === 'Sí'",
-     "then": [
-       { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
-       { "intent": "print", "message": "Tienes \${a2.output.answer} años" }
-     ],
-     "else": [
-       { "intent": "print", "message": "¡Hasta luego!" }
-     ]
-   }
-
-   ❌ WRONG - Generating all actions without conditional:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "id": "a2", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },  ← Always asks!
-   { "intent": "print", "message": "..." }
-
-16. CONDITIONAL "FINALLY" ACTIONS - CRITICAL: When playbook says "finalmente" (finally) with actions that depend on conditional data:
-   - ANALYZE: Does the "finally" action need data that only exists in the "then" branch?
-   - If YES: Put the "finally" action INSIDE the "then" branch, create appropriate alternative for "else"
-   - If NO: Put the "finally" action after the if statement
-
-   EXAMPLE SCENARIO:
-   Playbook: "Pregunta si quiere continuar, si quiere pregunta su edad. Finalmente saluda y bromea sobre su edad."
-   Translation: "Ask if they want to continue, if yes ask their age. Finally greet and joke about their age."
-
-   ANALYSIS: "bromea sobre su edad" (joke about age) needs age data, which only exists in "then" branch!
-
-   ✅ RIGHT - "Finally" action inside conditional:
-   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
-   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "intent": "if",
-     "condition": "\${a2.output.answer} === 'Sí'",
-     "then": [
-       { "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
-       { "intent": "print", "message": "¡Hola \${a1.output.answer}! Tienes \${a3.output.answer} años, ¡qué joven!" }
-     ],
-     "else": [
-       { "intent": "print", "message": "¡Hasta luego, \${a1.output.answer}! Espero que tengas un gran día." }
-     ]
-   }
-
-   ❌ WRONG - "Finally" action outside conditional (will fail when user says "No"):
-   { "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
-   { "id": "a2", "intent": "prompt_user", "question": "¿Quieres continuar?", "options": ["Sí", "No"] },
-   { "intent": "if",
-     "condition": "\${a2.output.answer} === 'Sí'",
-     "then": [{ "id": "a3", "intent": "prompt_user", "question": "¿Cuántos años tienes?" }],
-     "else": []
-   },
-   { "intent": "print", "message": "¡Hola! Tienes \${a3.output.answer} años" }  ← a3 doesn't exist if user said "No"!
-
-17. ITERATION/LOOPS - CRITICAL: Use iteration actions when playbook requests repeating actions:
-
-   A) FIXED NUMBER OF ITERATIONS - Use "repeat" action:
-      Keywords: "X veces" (X times), "pregunta 3 veces", "ask 5 times", "repite N veces"
-
-      STRUCTURE:
-      {
-        "intent": "repeat",
-        "count": N,
-        "actions": [ array of actions to repeat ]
-      }
-
-      EXAMPLE:
-      Playbook: "Pregunta al usuario 3 veces por su edad"
-      {
-        "intent": "repeat",
-        "count": 3,
-        "actions": [
-          { "id": "a1", "intent": "prompt_user", "question": "¿Cuántos años tienes?" },
-          { "intent": "print", "message": "Respuesta \${iteration}: \${a1.output.answer}" }
-        ]
-      }
-
-   B) CONDITIONAL ITERATION - Use "while" action:
-      Keywords: "hasta que" (until), "mientras" (while), "keep asking until", "repeat while"
-
-      TWO TYPES OF CONDITIONS:
-
-      B1) SIMPLE CONDITIONS - Use string condition for EXACT comparisons:
-          When: Exact string/number match, specific value comparison
-          Examples: "hasta que diga 'stop'", "while count < 10", "until answer equals 'yes'"
-
-          STRUCTURE:
-          {
-            "intent": "while",
-            "condition": "\${actionId.output.answer} !== 'stop'",
-            "max_iterations": 50,
-            "actions": [ array of actions to repeat ]
-          }
-
-          EXAMPLE:
-          Playbook: "Habla con el usuario hasta que te diga 'hasta luego'"
-          {
-            "intent": "while",
-            "condition": "\${a1.output.answer} !== 'hasta luego'",
-            "max_iterations": 50,
-            "actions": [
-              { "id": "a1", "intent": "prompt_user", "question": "¿De qué quieres hablar? (escribe 'hasta luego' para salir)" },
-              { "intent": "print", "message": "Dijiste: \${a1.output.answer}" }
-            ]
-          }
-
-      B2) SEMANTIC CONDITIONS - Use object condition with llm_eval for INTERPRETATION:
-          When: Semantic meaning, multiple valid phrases, natural language understanding
-          Examples: "hasta que se despida" (could be "adiós", "chao", "hasta luego", "me voy")
-                   "while user wants to continue" (could be "sí", "claro", "dale", "ok")
-                   "until user seems frustrated" (needs sentiment analysis)
-
-          STRUCTURE:
-          {
-            "intent": "while",
-            "condition": {
-              "llm_eval": true,
-              "instruction": "Question for LLM to answer with true/false",
-              "data": "\${actionId.output.answer}"
-            },
-            "max_iterations": 50,
-            "actions": [ array of actions to repeat ]
-          }
-
-          EXAMPLE:
-          Playbook: "Habla con el usuario hasta que se despida"
-          {
-            "intent": "while",
-            "condition": {
-              "llm_eval": true,
-              "instruction": "¿El usuario se está despidiendo o quiere terminar la conversación?",
-              "data": "\${a1.output.answer}"
-            },
-            "max_iterations": 50,
-            "actions": [
-              { "id": "a1", "intent": "prompt_user", "question": "¿De qué quieres hablar?" },
-              { "intent": "print", "message": "Interesante: \${a1.output.answer}" }
-            ]
-          }
-          ↑ This will recognize "adiós", "chao", "hasta luego", "me voy", "ya me voy", etc.
-
-      DECISION RULE - Which type to use?
-      → Playbook mentions EXACT phrase ("hasta que diga 'stop'")? → Use B1 (simple condition)
-      → Playbook describes MEANING/INTENT ("hasta que se despida", "while user wants")? → Use B2 (semantic condition)
-
-      CRITICAL: The condition is evaluated BEFORE each iteration.
-      - For simple conditions: Use !== for "until" semantics (continue while NOT met)
-      - For semantic conditions: Frame instruction as "Is the stop condition met?" (returns true to STOP)
-
-RESPONSE FORMAT (ALWAYS use this):
-{
+WHILE LOOP EXAMPLE:
+{ "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+{ "intent": "registry_set", "key": "last", "value": "\${a1.output.answer}" },
+{ "intent": "while",
+  "condition": { "llm_eval": true, "desc": "Processing your response", "instruction": "¿Continuar? (false si despedida)", "data": "\${a3.output.answer}" },
   "actions": [
-    { "actionType": "direct", "intent": "print", "message": "Display this to user" },
-    { "actionType": "direct", "intent": "return", "data": {...} }
+    { "id": "prev", "intent": "registry_get", "key": "last" },
+    { "id": "a2", "intent": "call_llm", "desc": "Thinking of next question", "data": {"answer":"\${prev.output.value}"}, "instruction": "Generate question related to answer" },
+    { "id": "a3", "intent": "prompt_user", "question": "\${a2.output.result}" },
+    { "intent": "registry_set", "key": "last", "value": "\${a3.output.answer}" },
+    { "intent": "print", "message": "Interesante: \${a3.output.answer}" }
   ]
 }
-
-CORRECT EXAMPLES:
-
-Example 1 - NEVER hardcode dynamic values (CRITICAL - Follow Rule #4):
-User prompt: "Create 2 users, then show 'X users created' where X is the count"
-❌ WRONG - Hardcoded count:
-{ "actionType": "direct", "intent": "print", "message": "✅ 2 users created" }
-
-✅ RIGHT - Dynamic count:
-{ "id": "a1", "actionType": "delegate", "intent": "createUser", "data": {...} },
-{ "id": "a2", "actionType": "delegate", "intent": "createUser", "data": {...} },
-{ "actionType": "direct", "intent": "print", "message": "✅ \${a1.output.success && a2.output.success ? 2 : (a1.output.success || a2.output.success ? 1 : 0)} users created" }
-
-Example 2 - Extracting names from natural language (CRITICAL - Follow Rule #6):
-User prompt: "Create Alice: id=001, age=30, email=alice@example.com"
-❌ WRONG - Missing name: { "data": { "id": "001", "age": 30, "email": "alice@example.com" } }
-✅ RIGHT - Include name: { "data": { "name": "Alice", "id": "001", "age": 30, "email": "alice@example.com" } }
-
-Example 3 - Delegate with ID:
-{
-  "actions": [
-    { "id": "a1", "actionType": "delegate", "intent": "getUser", "data": { "id": "001" } },
-    { "actionType": "direct", "intent": "print", "message": "User: \${a1.output.name}, age \${a1.output.age}" }
-  ]
-}
-
-Example 4 - Multiple actions with IDs:
-{
-  "actions": [
-    { "id": "a1", "actionType": "delegate", "intent": "listUsers" },
-    { "actionType": "direct", "intent": "print", "message": "Found \${a1.output.count} users" },
-    { "id": "a2", "actionType": "delegate", "intent": "getUser", "data": { "id": "001" } },
-    { "actionType": "direct", "intent": "print", "message": "First user: \${a2.output.name}" }
-  ]
-}
-
-Example 5 - Registry operations with IDs:
-{
-  "actions": [
-    { "id": "a1", "actionType": "direct", "intent": "registry_get", "key": "user:001" },
-    { "actionType": "direct", "intent": "print", "message": "Name: \${a1.output.value.name}" }
-  ]
-}
-
-Example 6 - Without IDs (when results aren't needed):
-{
-  "actions": [
-    { "actionType": "direct", "intent": "print", "message": "Hello" },
-    { "actionType": "delegate", "intent": "deleteUser", "data": { "id": "001" } },
-    { "actionType": "direct", "intent": "print", "message": "User deleted" }
-  ]
-}
-
-CRITICAL: ALWAYS include "actionType" field in EVERY action (either "direct" or "delegate")
+CRITICAL: condition.data MUST be the ID from prompt_user INSIDE the loop (a3), NOT from outside (a1)
 
 Available actions:
 ${actionRegistry.generatePromptDocumentation(agent)}
@@ -2058,14 +1094,10 @@ REMEMBER: Include print actions for ALL output the user should see, UNLESS the i
 
     // Finalize parser to catch any remaining actions
     const finalActions = parser.finalize();
-    if (onAction && finalActions.length > 0) {
-      for (const action of finalActions) {
-        await onAction(action);
-      }
-    }
 
+    // Print response immediately after receiving it
     if (process.env.KOI_DEBUG_LLM) {
-      console.error(`[LLM Debug] executeAnthropicStreaming Complete (${fullContent.length} chars)`);
+      console.error(`\n[LLM Debug] executeAnthropicStreaming Complete (${fullContent.length} chars)`);
       console.error('─'.repeat(80));
       console.error('[LLM Debug] Response:');
       // Format each line with < prefix and gray color
@@ -2074,6 +1106,12 @@ REMEMBER: Include print actions for ALL output the user should see, UNLESS the i
         console.error(`< \x1b[90m${line}\x1b[0m`);
       }
       console.error('─'.repeat(80));
+    }
+
+    if (onAction && finalActions.length > 0) {
+      for (const action of finalActions) {
+        await onAction(action);
+      }
     }
 
     return fullContent;

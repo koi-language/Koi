@@ -234,10 +234,23 @@ export class Agent {
 
       // Execute action immediately (sequential execution for proper chaining)
       try {
+        if (process.env.KOI_DEBUG_LLM) {
+          console.error(`[Agent:${this.name}] 🔄 Resolving references for action: ${action.intent || action.type}`);
+          if (action.message) {
+            console.error(`[Agent:${this.name}] 📝 Before resolution: message = ${action.message}`);
+          }
+          console.error(`[Agent:${this.name}] 📦 Context keys: ${Object.keys(actionContext).filter(k => k !== 'state' && k !== 'results' && k !== 'args').join(', ')}`);
+        }
         const resolvedAction = this.resolveActionReferences(action, actionContext);
+        if (process.env.KOI_DEBUG_LLM && action.message) {
+          console.error(`[Agent:${this.name}] ✅ After resolution: message = ${resolvedAction.message}`);
+        }
 
-        // Check condition if present (but skip for "if" action which handles its own condition internally)
-        if (resolvedAction.condition !== undefined && resolvedAction.intent !== 'if' && resolvedAction.type !== 'if') {
+        // Check condition if present (but skip for actions that handle their own conditions internally)
+        const actionsWithOwnConditions = ['if', 'while', 'repeat'];
+        if (resolvedAction.condition !== undefined &&
+            !actionsWithOwnConditions.includes(resolvedAction.intent) &&
+            !actionsWithOwnConditions.includes(resolvedAction.type)) {
           const conditionMet = this.evaluateCondition(resolvedAction.condition, actionContext);
           if (!conditionMet) {
             return; // Skip this action
@@ -246,35 +259,11 @@ export class Agent {
 
         const intent = resolvedAction.intent || resolvedAction.type || resolvedAction.description;
         const actionTitle = resolvedAction.title || intent;
-        cliLogger.progress(`[${this.name}] ${actionTitle}`);
+        const displayText = resolvedAction.desc ? resolvedAction.desc.replace(/\.\.\.$/, '') : 'Thinking';
+        cliLogger.planning(`[🤖 ${this.name}] ${displayText}`);
 
-        let result;
-
-        // Check if this is a delegation action
-        if (action.actionType === 'delegate') {
-          // Delegation: route to appropriate team member
-          if (process.env.KOI_DEBUG_LLM) {
-            console.error(`[Agent:${this.name}] 🔀 Delegating action: ${action.intent}`);
-          }
-          result = await this.resolveAction(resolvedAction, actionContext);
-        } else {
-          // Direct action: check if this is a registered action with an executor
-          const actionDef = actionRegistry.get(action.intent || action.type);
-
-          if (actionDef && actionDef.execute) {
-            // Fast path: execute registered action
-            // Store current context in agent for actions that need it (like 'if')
-            this._currentActionContext = actionContext;
-            result = await actionDef.execute(resolvedAction, this);
-            delete this._currentActionContext;
-          } else if (action.intent || action.description) {
-            // Resolve via router (legacy fallback)
-            result = await this.resolveAction(resolvedAction, actionContext);
-          } else {
-            // Fallback legacy
-            result = await this.executeLegacyAction(resolvedAction);
-          }
-        }
+        // Execute the action using common method
+        const { result } = await this._executeAction(action, resolvedAction, actionContext);
 
         cliLogger.clear();
 
@@ -430,6 +419,50 @@ export class Agent {
     return result;
   }
 
+  /**
+   * Execute a single action (common code for both streaming and batch execution)
+   * @private
+   * @returns {Object} { result, shouldExitLoop }
+   */
+  async _executeAction(action, resolvedAction, context) {
+    const actionRegistry = (await import('./action-registry.js')).actionRegistry;
+    let result;
+    let shouldExitLoop = false;
+
+    // Check if this is a delegation action
+    if (action.actionType === 'delegate') {
+      // Delegation: route to appropriate team member
+      if (process.env.KOI_DEBUG_LLM) {
+        console.error(`[Agent:${this.name}] 🔀 Delegating action: ${action.intent}`);
+      }
+      result = await this.resolveAction(resolvedAction, context);
+    } else {
+      // Direct action: check if this is a registered action with an executor
+      const actionDef = actionRegistry.get(action.intent || action.type);
+
+      if (actionDef && actionDef.execute) {
+        // Fast path: execute registered action
+        // Store current context in agent for actions that need it (like 'if', 'while', etc.)
+        this._currentActionContext = context;
+        result = await actionDef.execute(resolvedAction, this);
+        delete this._currentActionContext;
+
+        // Special handling for return action with conditions
+        if ((action.intent === 'return' || action.type === 'return') && action.condition !== undefined) {
+          shouldExitLoop = true;
+        }
+      } else if (action.intent || action.description) {
+        // Resolve via router (legacy fallback)
+        result = await this.resolveAction(resolvedAction, context);
+      } else {
+        // Fallback legacy
+        result = await this.executeLegacyAction(resolvedAction);
+      }
+    }
+
+    return { result, shouldExitLoop };
+  }
+
   async executeActions(actions) {
     let finalResult = {};
     let context = {
@@ -459,40 +492,18 @@ export class Agent {
       // Show what action is being executed
       // Use the "title" field if the LLM provided one, otherwise use intent
       const actionTitle = resolvedAction.title || intent;
-      cliLogger.progress(`[${this.name}] ${actionTitle}`);
+      cliLogger.progress(`[${this.name}] Thinking...`);
 
-      // Check if this is a delegation action
-      if (action.actionType === 'delegate') {
-        // Delegation: route to appropriate team member
-        if (process.env.KOI_DEBUG_LLM) {
-          console.error(`[Agent:${this.name}] 🔀 Delegating action: ${action.intent}`);
-        }
-        finalResult = await this.resolveAction(resolvedAction, context);
-      } else {
-        // Direct action: check if this is a registered action with an executor
-        const actionDef = actionRegistry.get(action.intent || action.type);
+      // Execute the action using common method
+      const { result, shouldExitLoop } = await this._executeAction(action, resolvedAction, context);
+      finalResult = result;
 
-        if (actionDef && actionDef.execute) {
-          // Fast path: execute registered action
-          // Store current context in agent for actions that need it (like 'if')
-          this._currentActionContext = context;
-          finalResult = await actionDef.execute(resolvedAction, this);
-          delete this._currentActionContext;
-
-          // Special handling for return action with conditions
-          if ((action.intent === 'return' || action.type === 'return') && action.condition !== undefined) {
-            context.results.push(finalResult);
-            context.previousResult = finalResult;
-            context.lastResult = finalResult;
-            i = actions.length; // Exit loop
-          }
-        } else if (action.intent || action.description) {
-          // Resolve via router (legacy fallback)
-          finalResult = await this.resolveAction(resolvedAction, context);
-        } else {
-          // Fallback legacy
-          finalResult = await this.executeLegacyAction(resolvedAction);
-        }
+      // Handle special return action with conditions
+      if (shouldExitLoop) {
+        context.results.push(finalResult);
+        context.previousResult = finalResult;
+        context.lastResult = finalResult;
+        i = actions.length; // Exit loop
       }
 
       // Clear progress after action completes
@@ -612,10 +623,21 @@ export class Agent {
 
     // Resolve references in message/text fields (for print action)
     if (resolved.message !== undefined) {
+      if (process.env.KOI_DEBUG_LLM) {
+        console.error(`[Agent:${this.name}] 🔍 Resolving message field: "${resolved.message}"`);
+      }
       resolved.message = this.resolveObjectReferences(resolved.message, context);
+      if (process.env.KOI_DEBUG_LLM) {
+        console.error(`[Agent:${this.name}] ✨ Resolved message field: "${resolved.message}"`);
+      }
     }
     if (resolved.text !== undefined) {
       resolved.text = this.resolveObjectReferences(resolved.text, context);
+    }
+
+    // Resolve references in question field (for prompt_user action)
+    if (resolved.question !== undefined) {
+      resolved.question = this.resolveObjectReferences(resolved.question, context);
     }
 
     return resolved;
@@ -849,7 +871,8 @@ export class Agent {
       // 2️⃣ Do I have a matching skill?
       const matchingSkill = this.findMatchingSkill(intent);
       if (matchingSkill) {
-        cliLogger.progress(`  → [${this.name}] skill:${matchingSkill}...`);
+        const displayText = action.desc ? action.desc.replace(/\.\.\.$/, '') : 'Thinking';
+        cliLogger.planning(`[🤖 ${this.name}] ${displayText}`);
         const result = await this.callSkill(matchingSkill, action.data || action.input || {});
         cliLogger.clear();
         globalCallStack.pop();
