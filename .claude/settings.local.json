@@ -75,7 +75,13 @@
       "Bash(md5:*)",
       "Bash(ln:*)",
       "Bash(printf:*)",
-      "Bash(KOI_DEBUG_LLM=1 timeout 15 node:*)"
+      "Bash(KOI_DEBUG_LLM=1 timeout 15 node:*)",
+      "Bash(do echo \"Test$i\")",
+      "Bash(do echo \"User$i\")",
+      "Bash(python3:*)",
+      "Bash(perl:*)",
+      "Bash(do)",
+      "Bash(pkill:*)"
     ]
   }
 }

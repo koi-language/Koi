@@ -5,6 +5,67 @@ import { actionRegistry } from './action-registry.js';
 // Global call stack to detect infinite loops across all agents
 const globalCallStack = [];
 
+/**
+ * Use LLM to infer return type from playbook
+ * @param {string} playbook - The playbook text
+ * @returns {Promise<string>} - Return type description (e.g., "{ question: string }")
+ */
+async function inferReturnType(playbook) {
+  try {
+    if (process.env.KOI_DEBUG_LLM) {
+      console.error('[InferReturnType] Analyzing playbook...');
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return '{ "result": "any" }';
+    }
+
+    // Call OpenAI API directly without the playbook-to-JSON system prompt
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0,
+        messages: [
+          {
+            role: 'system',
+            content: 'Extract the return type structure from agent playbooks. Respond with ONLY a JSON object showing field names and types.'
+          },
+          {
+            role: 'user',
+            content: `Analyze this playbook and extract the return type:\n\n${playbook}\n\nIf it mentions "Return:", "return:", or describes what it returns, extract that structure as JSON like: { "question": "string" } or { "answer": "string" }. If you cannot determine it, respond: { "result": "any" }. NO markdown, NO explanations, ONLY the JSON structure.`
+          }
+        ]
+      })
+    });
+
+    const data = await response.json();
+    let returnType = data.choices[0].message.content.trim();
+
+    // Clean up response (remove markdown if present)
+    if (returnType.startsWith('```')) {
+      returnType = returnType.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    }
+
+    if (process.env.KOI_DEBUG_LLM) {
+      console.error(`[InferReturnType] Result: ${returnType}`);
+    }
+
+    return returnType;
+  } catch (error) {
+    if (process.env.KOI_DEBUG_LLM) {
+      console.error(`[InferReturnType] Error: ${error.message}`);
+    }
+    // If inference fails, use convention
+    return '{ "result": "any" }';
+  }
+}
+
 export class Agent {
   constructor(config) {
     this.name = config.name;
@@ -1132,12 +1193,12 @@ export class Agent {
    * Generate peer capabilities formatted as available actions
    * Returns a string listing delegation actions in the same format as action registry
    */
-  getPeerCapabilitiesAsActions() {
+  async getPeerCapabilitiesAsActions() {
     const capabilities = [];
     const processedAgents = new Set();
 
     // Helper function to collect handlers from an agent
-    const collectHandlers = (agent, teamName = null) => {
+    const collectHandlers = async (agent, teamName = null) => {
       if (!agent || processedAgents.has(agent.name)) {
         return;
       }
@@ -1150,46 +1211,42 @@ export class Agent {
 
           // Extract affordance/description from handler
           let description = '';
+          let returnType = null;
           const handlerFn = agent.handlers[handler];
 
           if (handlerFn && handlerFn.__playbook__) {
-            // Extract first line or first sentence from playbook as description
             const playbook = handlerFn.__playbook__;
-            const lines = playbook.split('\n');
-            const firstLine = lines[0].trim();
 
-            // Remove template variables for cleaner description
+            if (process.env.KOI_DEBUG_LLM) {
+              console.error(`[CollectHandlers] Found playbook for ${handler}, length: ${playbook.length}`);
+            }
+
+            // Extract first line as brief description
+            const lines = playbook.split('\n').map(l => l.trim()).filter(l => l);
+            const firstLine = lines[0] || '';
             description = firstLine.replace(/\$\{[^}]+\}/g, '...').substring(0, 80);
             if (description.length < firstLine.length) {
               description += '...';
             }
 
-            // Try to extract return structure from playbook
-            // Look for patterns like "return: { ... }" or "2. Return: { ... }"
-            for (const line of lines) {
-              const returnMatch = line.match(/(?:return|Return):\s*\{([^}]+)\}/i);
-              if (returnMatch) {
-                // Found a return statement - extract key structure
-                const returnContent = returnMatch[1];
-                // Extract field names (simple parsing)
-                const fields = returnContent.match(/"([^"]+)":/g);
-                if (fields) {
-                  const fieldNames = fields.map(f => f.replace(/[":]/g, '')).join(', ');
-                  description += ` → Returns: {${fieldNames}}`;
-                }
-                break;
-              }
+            // Use LLM to infer return type from playbook
+            returnType = await inferReturnType(playbook);
+
+            if (process.env.KOI_DEBUG_LLM) {
+              console.error(`[CollectHandlers] Inferred return type for ${handler}: ${returnType}`);
             }
           } else if (handlerFn && typeof handlerFn === 'function') {
             // For regular functions, generate description from name
             description = `Handle ${handler} event`;
+            returnType = '{ "result": "any" }';
           }
 
           capabilities.push({
             intent: handler,
             agent: agentInfo,
             role: agent.role ? agent.role.name : 'Unknown',
-            description: description || `Execute ${handler}`
+            description: description || `Execute ${handler}`,
+            returnType: returnType || '{ "result": "any" }'
           });
         }
       }
@@ -1201,7 +1258,7 @@ export class Agent {
       for (const memberName of memberNames) {
         const member = this.peers.members[memberName];
         if (member !== this) {
-          collectHandlers(member, this.peers.name);
+          await collectHandlers(member, this.peers.name);
         }
       }
     }
@@ -1212,7 +1269,7 @@ export class Agent {
         const memberNames = Object.keys(team.members);
         for (const memberName of memberNames) {
           const member = team.members[memberName];
-          collectHandlers(member, team.name);
+          await collectHandlers(member, team.name);
         }
       }
     }
@@ -1223,7 +1280,8 @@ export class Agent {
 
     let doc = '\n\nDelegation actions (to team members):\n';
     for (const cap of capabilities) {
-      doc += `- { "actionType": "delegate", "intent": "${cap.intent}", "data": ... } - ${cap.description} (Delegate to ${cap.agent} [${cap.role}])\n`;
+      // Build delegation description with inferred return type
+      doc += `- { "actionType": "delegate", "intent": "${cap.intent}", "data": ... } - ${cap.description} → Returns: ${cap.returnType} (Delegate to ${cap.agent} [${cap.role}])\n`;
     }
 
     return doc;

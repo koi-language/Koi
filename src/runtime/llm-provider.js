@@ -350,7 +350,7 @@ CRITICAL: condition.data MUST be the ID from prompt_user INSIDE the loop (a3), N
 
 Available actions:
 ${actionRegistry.generatePromptDocumentation(agent)}
-${hasTeams && agent ? agent.getPeerCapabilitiesAsActions() : ''}
+${hasTeams && agent ? await agent.getPeerCapabilitiesAsActions() : ''}
 
 ${hasTeams ? `\nIMPORTANT: Do NOT nest "intent" inside "data". The "intent" field must be at the top level.` : ''}
 
@@ -696,7 +696,7 @@ CRITICAL: condition.data MUST be the ID from prompt_user INSIDE the loop (a3), N
 
 Available actions:
 ${actionRegistry.generatePromptDocumentation(agent)}
-${hasTeams && agent ? agent.getPeerCapabilitiesAsActions() : ''}
+${hasTeams && agent ? await agent.getPeerCapabilitiesAsActions() : ''}
 
 ${hasTeams ? `\nIMPORTANT: Do NOT nest "intent" inside "data". The "intent" field must be at the top level.` : ''}
 
@@ -780,7 +780,7 @@ CRITICAL: condition.data MUST be the ID from prompt_user INSIDE the loop (a3), N
 
 Available actions:
 ${actionRegistry.generatePromptDocumentation(agent)}
-${hasTeams && agent ? agent.getPeerCapabilitiesAsActions() : ''}
+${hasTeams && agent ? await agent.getPeerCapabilitiesAsActions() : ''}
 
 ${hasTeams ? `\nIMPORTANT: Do NOT nest "intent" inside "data". The "intent" field must be at the top level.` : ''}
 
@@ -1009,7 +1009,7 @@ CRITICAL: condition.data MUST be the ID from prompt_user INSIDE the loop (a3), N
 
 Available actions:
 ${actionRegistry.generatePromptDocumentation(agent)}
-${hasTeams && agent ? agent.getPeerCapabilitiesAsActions() : ''}
+${hasTeams && agent ? await agent.getPeerCapabilitiesAsActions() : ''}
 
 ${hasTeams ? `\nIMPORTANT: Do NOT nest "intent" inside "data". The "intent" field must be at the top level.` : ''}
 
