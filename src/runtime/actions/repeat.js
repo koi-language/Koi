@@ -106,12 +106,28 @@ export default {
 
         // Update iteration context with result
         if (result && typeof result === 'object') {
+          // Unwrap double-encoded results (LLM sometimes returns { "result": "{...json...}" })
+          if (result.result && typeof result.result === 'string' && Object.keys(result).length === 1) {
+            try {
+              const parsed = JSON.parse(result.result);
+              if (typeof parsed === 'object') {
+                result = parsed;
+              }
+            } catch (e) {
+              // Not JSON, keep as-is
+            }
+          }
+
           const resultForContext = JSON.parse(JSON.stringify(result));
           iterationContext.results.push(resultForContext);
 
           // Store with action ID if provided
           if (nestedAction.id) {
             iterationContext[nestedAction.id] = { output: resultForContext };
+
+            if (process.env.KOI_DEBUG_LLM) {
+              console.error(`[repeat] Stored result for ID "${nestedAction.id}":`, JSON.stringify(resultForContext));
+            }
           }
 
           // Track all results

@@ -120,6 +120,18 @@ export default {
 
         // Update iteration context with result (and parent context for next iteration's condition check)
         if (result && typeof result === 'object') {
+          // Unwrap double-encoded results (LLM sometimes returns { "result": "{...json...}" })
+          if (result.result && typeof result.result === 'string' && Object.keys(result).length === 1) {
+            try {
+              const parsed = JSON.parse(result.result);
+              if (typeof parsed === 'object') {
+                result = parsed;
+              }
+            } catch (e) {
+              // Not JSON, keep as-is
+            }
+          }
+
           const resultForContext = JSON.parse(JSON.stringify(result));
           iterationContext.results.push(resultForContext);
           context.results.push(resultForContext);  // Also update parent for condition evaluation
