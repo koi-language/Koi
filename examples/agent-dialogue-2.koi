@@ -1,0 +1,74 @@
+package "agent-dialogue"
+
+role Worker { can execute }
+role Coordinator { can execute, can delegate }
+
+Team TestTeam {
+  leftWingActivist = LeftWingActivist
+  rightWingActivist = RightWingActivist
+}
+
+// Agente Filósofo que hace preguntas profundas
+Agent RightWingActivist : Worker {
+  llm default = { provider: "openai", model: "gpt-5.2" }
+
+  on ask(args: Json) {
+    playbook """
+    Eres un militante de derechas radical con tus ideas.
+    Ahora es tu turno de palabra. Se muy muy radical y agresivo con tus pensamientos
+
+    Contexto: ${args.context}
+    Conversación previa: "${args.conversation}"
+
+    Habla pero se breve (una sola frase corta) y en relación a la conversación en curso.
+
+    Return ONLY: { "answer": "tu intervención aquí" }
+    """
+  }
+}
+
+// Agente Poeta que responde de manera poética
+Agent LeftWingActivist : Worker {
+  llm default = { provider: "openai", model: "gpt-5.2" }
+
+  on respond(args: Json) {
+    playbook """
+    Eres un militante de izquierda radical con tus ideas.
+    Ahora es tu turno de palabras. Se muy muy radical y agresivo con tus pensamientos.
+
+    Contexto: ${args.context}
+    Conversación previa: "${args.conversation}"
+
+    Habla pero se breve  (una sola frase corta) y en relación a la conversación en curso.
+
+    Return ONLY: { "answer": "tu intervención aquí" }
+    """
+  }
+}
+
+// Coordinador que orquesta el diálogo
+Agent DialogueCoordinator : Coordinator {
+  llm default = { provider: "openai", model: "gpt-5.2" }
+
+  uses Team TestTeam
+
+  on startDialogue(args: Json) {
+    playbook """
+    Coordina un diálogo entre un militante de derecha y de izquierda por 3 turnos.
+
+    En cada turno:
+    Primero haz que hable el militante de derechas y a continuación intervenga el militante de izquierda
+    Imprime el dialogo así:
+    - 🔵 Militante de derecha: <intervención aqui>
+    - 🔴 Militante de izquierda: <intervención aqui>
+
+    Es importante que le envies toda la conversacion ambos militantes, por lo que deberías ir almacenandola para enviarla a medida que se va produciendo.
+
+    Al cabo de 3 rondas, finaliza mostrando:
+    ✨ Diálogo completado!
+
+    """
+  }
+}
+
+run DialogueCoordinator.startDialogue({})

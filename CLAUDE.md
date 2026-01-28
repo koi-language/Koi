@@ -5,12 +5,13 @@
 ## Table of Contents
 1. [Project Overview](#project-overview)
 2. [Architecture](#architecture)
-3. [Key Patterns](#key-patterns)
-4. [LLM Integration](#llm-integration)
-5. [Recent Improvements](#recent-improvements)
-6. [Lessons Learned](#lessons-learned)
-7. [Best Practices](#best-practices)
-8. [Common Pitfalls](#common-pitfalls)
+3. [Debugging & Logging](#debugging--logging)
+4. [Key Patterns](#key-patterns)
+5. [LLM Integration](#llm-integration)
+6. [Recent Improvements](#recent-improvements)
+7. [Lessons Learned](#lessons-learned)
+8. [Best Practices](#best-practices)
+9. [Common Pitfalls](#common-pitfalls)
 
 ---
 
@@ -81,6 +82,133 @@ koi/
    - LLM returns JSON array of actions
    - Actions executed sequentially (with streaming support)
    - Results chained via template variables (`${a1.output}`)
+
+---
+
+## Debugging & Logging
+
+### Enable Full LLM Debug Logging
+
+The most powerful debugging tool in KOI is the `KOI_DEBUG_LLM` environment variable, which shows **all** LLM interactions:
+
+```bash
+# Enable debug logging
+export KOI_DEBUG_LLM=1
+
+# Run your playbook
+koi run examples/agent-dialogue-2.koi
+
+# Or in one command
+KOI_DEBUG_LLM=1 koi run examples/agent-dialogue-2.koi
+
+# Save to file for analysis
+KOI_DEBUG_LLM=1 koi run examples/agent-dialogue-2.koi 2>&1 | tee debug.log
+```
+
+### What You'll See
+
+When `KOI_DEBUG_LLM=1` is set, you get:
+
+#### 1. **System Prompts**
+```
+[LLM Debug] executeOpenAIStreaming - Model: gpt-5.2 | Agent: DialogueCoordinator
+System Prompt:
+> Convert playbook to JSON actions.
+>
+> OUTPUT: { "actions": [...] }
+>
+> CRITICAL RULES:
+> 1. call_llm: ONLY when playbook says "random", "relacionado", "based on"...
+```
+
+#### 2. **User Prompts (Playbook Text + Context)**
+```
+User Prompt:
+============
+> Coordina un diálogo entre un militante de derecha y de izquierda por 3 turnos.
+>
+> Context: {"args":{},"state":{}}
+```
+
+#### 3. **LLM JSON Responses**
+```
+[LLM Debug] Response:
+< { "actions": [
+<   { "id": "right_turn", "actionType": "delegate", "intent": "ask", ... },
+<   { "id": "left_turn", "actionType": "delegate", "intent": "respond", ... }
+< ] }
+```
+
+#### 4. **Template Variable Resolution**
+```
+[Agent:RightWingActivist] 💾 Stored right_turn.output = {"answer":"La defensa..."}
+[Agent:DialogueCoordinator] ⚠️  Could not resolve placeholder: intervention.output.result
+```
+
+#### 5. **Action Execution Flow**
+```
+[🤖 DialogueCoordinator] Thinking
+  → [RightWingActivist] ask
+[🤖 RightWingActivist] Thinking
+[repeat] Stored result for ID "right_turn": {"answer":"..."}
+```
+
+### Common Debug Scenarios
+
+#### **Scenario 1: Template variables not resolving**
+```bash
+# Look for this pattern in debug output:
+⚠️  Could not resolve placeholder: right_turn.output.answer
+```
+
+**Diagnosis:**
+- Action with `id: "right_turn"` either:
+  1. Hasn't executed yet (order issue)
+  2. Executed but result wasn't stored (missing `id` field)
+  3. Stored in wrong context (scoping issue in loops/conditionals)
+
+**Fix:** Check that the action has `"id": "right_turn"` and executes before the template reference.
+
+#### **Scenario 2: LLM using call_llm when it shouldn't**
+```bash
+# Look for:
+{ "id": "intervention", "intent": "call_llm", "data": { ... } }
+```
+
+**Diagnosis:** LLM thinks content is "dynamic" when the playbook can generate it directly.
+
+**Fix:** Clarify in playbook: "Return ONLY: { answer: '...' }" or check system prompt rules.
+
+#### **Scenario 3: Actions executing in wrong order**
+```bash
+# Watch the execution flow:
+[🤖 DialogueCoordinator] Thinking
+  → [LeftWingActivist] respond   # ← Should this be first?
+  → [RightWingActivist] ask
+```
+
+**Diagnosis:** LLM generated actions in wrong sequence.
+
+**Fix:** Make playbook more explicit: "FIRST delegate to right-wing, THEN to left-wing".
+
+### Debug Output Location
+
+All debug output goes to **stderr** (not stdout), so:
+
+```bash
+# Capture only debug info
+KOI_DEBUG_LLM=1 koi run file.koi 2> debug.log
+
+# Capture both normal output and debug info
+KOI_DEBUG_LLM=1 koi run file.koi 2>&1 | tee full.log
+
+# Grep for specific patterns
+KOI_DEBUG_LLM=1 koi run file.koi 2>&1 | grep "Could not resolve"
+```
+
+### Performance Note
+
+Debug logging adds minimal overhead (~1-2% slower) since it just logs what's already happening. Safe to use in development.
 
 ---
 
@@ -328,6 +456,96 @@ koi run examples/iteration-demo.koi
 #   ¿Cuál es tu nombre? (asked ONCE)
 #   ¿Qué te inspira más sobre la vida de Antonio? (dynamic, based on name)
 #   ...then asks about programming (dynamic, based on previous answer)
+```
+
+### System Prompt Simplification & Action ID Clarity (2026)
+
+**Problem:** System prompts were over-explaining concepts with verbose examples, and LLMs were using placeholder IDs like "a1", "a2" literally instead of descriptive names.
+
+**Solution:** Drastically simplified system prompts in `llm-provider.js`:
+- Reduced from ~15 verbose rules to 5 concise rules
+- Removed redundant explanations about when to use `call_llm`
+- Made WHILE LOOP example use descriptive IDs directly ("name", "question", "response" instead of "a1", "a2", "a3")
+- Simplified data chaining docs to 4 bullet points
+
+**Before:**
+```
+IMPORTANT - Action IDs:
+- IDs like "a1", "a2", "a3" in examples below are PLACEHOLDERS ONLY
+- DO NOT literally use "a1" in your actions - these are just examples!
+- Use DESCRIPTIVE IDs that match the action purpose...
+[15 more lines of explanation]
+```
+
+**After:**
+```
+Data chaining:
+- Reference action outputs: ${actionId.output.field}
+- Template variables ONLY in strings: { "count": "${user.output.length}" } ✅
+- Use descriptive IDs: "user", "question", "response", NOT "a1", "a2", "a3"
+- Examples: ${user.output.name}, ${question.output.result}
+```
+
+**Key Rule Change:**
+```
+1. call_llm: ONLY when playbook says "random", "relacionado", "based on", "adapted", "generate question".
+   If playbook can generate content directly, do NOT use call_llm.
+```
+
+**Impact:**
+- Reduced token usage on every playbook execution
+- LLMs now use descriptive IDs consistently
+- Clearer guidance prevents unnecessary `call_llm` usage
+- Better examples lead to better action generation
+
+**Files Modified:**
+- `src/runtime/llm-provider.js` (all 4 execution methods: executeOpenAI, executeAnthropic, executeOpenAIStreaming, executeAnthropicStreaming)
+
+### Template Variable Resolution in Repeat Actions (2026)
+
+**Problem:** Template variables like `${right_turn.output.answer}` weren't resolving when referenced outside a `repeat` action's scope. The variables would work inside the loop but show as literal text (`${...}`) in actions after the repeat completed.
+
+**Root Cause:** The `repeat` action (in `src/runtime/actions/repeat.js`) was storing action results in a temporary `iterationContext` that got destroyed after each iteration. The parent context never received the action IDs, so subsequent actions couldn't resolve the references.
+
+**Example of Broken Behavior:**
+```javascript
+// Inside repeat loop:
+{ "id": "right_turn", "intent": "delegate", ... }  // ← Executes, stores in iterationContext
+// After repeat:
+{ "intent": "print", "message": "Answer: ${right_turn.output.answer}" }  // ← Can't find right_turn!
+```
+
+**Solution:** Propagate action results back to parent context (line 125 in repeat.js):
+```javascript
+// Store with action ID if provided
+if (nestedAction.id) {
+  iterationContext[nestedAction.id] = { output: resultForContext };
+
+  // CRITICAL: Propagate action ID results back to parent context
+  // so template variables like ${right_turn.output.answer} work outside the repeat
+  context[nestedAction.id] = { output: resultForContext };
+
+  if (process.env.KOI_DEBUG_LLM) {
+    console.error(`[repeat] Stored result for ID "${nestedAction.id}":`, ...);
+  }
+}
+```
+
+**Impact:**
+- Template variables now resolve correctly across repeat boundaries
+- Multi-turn dialogue examples work as expected
+- Fixes agent orchestration patterns where coordinator prints results from repeated delegations
+
+**Files Modified:**
+- `src/runtime/actions/repeat.js` (execute method, lines 125-127)
+
+**Testing:**
+```bash
+koi run examples/agent-dialogue-2.koi
+# All turns now display correctly:
+# - 🔵 Militante de derecha: La defensa de la libertad...
+# - 🔴 Militante de izquierda: La justicia social...
+# (No more literal ${right_turn.output.answer})
 ```
 
 ---

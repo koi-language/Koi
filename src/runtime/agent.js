@@ -6,21 +6,25 @@ import { actionRegistry } from './action-registry.js';
 const globalCallStack = [];
 
 /**
- * Use LLM to infer return type from playbook
+ * Use LLM to infer action metadata from playbook
  * @param {string} playbook - The playbook text
- * @returns {Promise<string>} - Return type description (e.g., "{ question: string }")
+ * @returns {Promise<{description: string, inputParams: string, returnType: string}>}
  */
-async function inferReturnType(playbook) {
+async function inferActionMetadata(playbook) {
   try {
     if (process.env.KOI_DEBUG_LLM) {
-      console.error('[InferReturnType] Analyzing playbook...');
+      console.error('[InferActionMetadata] Analyzing playbook...');
     }
 
     if (!process.env.OPENAI_API_KEY) {
-      return '{ "result": "any" }';
+      return {
+        description: 'Execute action',
+        inputParams: '{ ... }',
+        returnType: '{ "result": "any" }'
+      };
     }
 
-    // Call OpenAI API directly without the playbook-to-JSON system prompt
+    // Call OpenAI API directly
     const fetch = (await import('node-fetch')).default;
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -34,35 +38,45 @@ async function inferReturnType(playbook) {
         messages: [
           {
             role: 'system',
-            content: 'Extract the return type structure from agent playbooks. Respond with ONLY a JSON object showing field names and types.'
+            content: 'Extract action metadata from agent playbooks. Focus on UNIQUE, SPECIFIC characteristics that distinguish this action from others. Return ONLY valid JSON.'
           },
           {
             role: 'user',
-            content: `Analyze this playbook and extract the return type:\n\n${playbook}\n\nIf it mentions "Return:", "return:", or describes what it returns, extract that structure as JSON like: { "question": "string" } or { "answer": "string" }. If you cannot determine it, respond: { "result": "any" }. NO markdown, NO explanations, ONLY the JSON structure.`
+            content: `Analyze this playbook and identify what makes it UNIQUE:\n\n${playbook}\n\nExtract:\n1. description: What makes THIS action unique and specific (15-20 words). Focus on:\n   - The specific role/persona (e.g., "left-wing activist", "philosopher", "poet")\n   - The unique perspective or style it brings\n   - What differentiates it from similar actions\n   Example: "Generates radical left-wing political response from activist perspective" NOT "Generates response"\n\n2. inputParams: Input parameters structure (look for \${args.X} references)\n   Example: { "context": "string", "conversation": "string" }\n\n3. returnType: Output structure (look for "Return:" or return statements)\n   Example: { "answer": "string" }\n\nRespond with JSON:\n{ "description": "...", "inputParams": "{ ... }", "returnType": "{ ... }" }\n\nNO markdown, NO explanations, ONLY JSON.`
           }
         ]
       })
     });
 
     const data = await response.json();
-    let returnType = data.choices[0].message.content.trim();
+    let result = data.choices[0].message.content.trim();
 
     // Clean up response (remove markdown if present)
-    if (returnType.startsWith('```')) {
-      returnType = returnType.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    if (result.startsWith('```')) {
+      result = result.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     }
+
+    const parsed = JSON.parse(result);
 
     if (process.env.KOI_DEBUG_LLM) {
-      console.error(`[InferReturnType] Result: ${returnType}`);
+      console.error(`[InferActionMetadata] Result:`, parsed);
     }
 
-    return returnType;
+    return {
+      description: parsed.description || 'Execute action',
+      inputParams: parsed.inputParams || '{ ... }',
+      returnType: parsed.returnType || '{ "result": "any" }'
+    };
   } catch (error) {
     if (process.env.KOI_DEBUG_LLM) {
-      console.error(`[InferReturnType] Error: ${error.message}`);
+      console.error(`[InferActionMetadata] Error: ${error.message}`);
     }
-    // If inference fails, use convention
-    return '{ "result": "any" }';
+    // If inference fails, use defaults
+    return {
+      description: 'Execute action',
+      inputParams: '{ ... }',
+      returnType: '{ "result": "any" }'
+    };
   }
 }
 
@@ -320,7 +334,20 @@ export class Agent {
 
         // Update context for next action (chaining)
         if (result && typeof result === 'object') {
-          const resultForContext = JSON.parse(JSON.stringify(result));
+          // Unwrap double-encoded results (LLM sometimes returns { "result": "{...json...}" })
+          let unwrappedResult = result;
+          if (result.result && typeof result.result === 'string' && Object.keys(result).length === 1) {
+            try {
+              const parsed = JSON.parse(result.result);
+              if (typeof parsed === 'object') {
+                unwrappedResult = parsed;
+              }
+            } catch (e) {
+              // Not JSON, keep as-is
+            }
+          }
+
+          const resultForContext = JSON.parse(JSON.stringify(unwrappedResult));
           actionContext.results.push(resultForContext);
 
           // Store result with action ID for explicit referencing
@@ -1211,6 +1238,7 @@ export class Agent {
 
           // Extract affordance/description from handler
           let description = '';
+          let inputParams = '{ ... }';
           let returnType = null;
           const handlerFn = agent.handlers[handler];
 
@@ -1221,23 +1249,19 @@ export class Agent {
               console.error(`[CollectHandlers] Found playbook for ${handler}, length: ${playbook.length}`);
             }
 
-            // Extract first line as brief description
-            const lines = playbook.split('\n').map(l => l.trim()).filter(l => l);
-            const firstLine = lines[0] || '';
-            description = firstLine.replace(/\$\{[^}]+\}/g, '...').substring(0, 80);
-            if (description.length < firstLine.length) {
-              description += '...';
-            }
-
-            // Use LLM to infer return type from playbook
-            returnType = await inferReturnType(playbook);
+            // Use LLM to infer metadata from playbook
+            const metadata = await inferActionMetadata(playbook);
+            description = metadata.description;
+            inputParams = metadata.inputParams;
+            returnType = metadata.returnType;
 
             if (process.env.KOI_DEBUG_LLM) {
-              console.error(`[CollectHandlers] Inferred return type for ${handler}: ${returnType}`);
+              console.error(`[CollectHandlers] Inferred metadata for ${handler}:`, metadata);
             }
           } else if (handlerFn && typeof handlerFn === 'function') {
             // For regular functions, generate description from name
             description = `Handle ${handler} event`;
+            inputParams = '{ ... }';
             returnType = '{ "result": "any" }';
           }
 
@@ -1246,6 +1270,7 @@ export class Agent {
             agent: agentInfo,
             role: agent.role ? agent.role.name : 'Unknown',
             description: description || `Execute ${handler}`,
+            inputParams: inputParams,
             returnType: returnType || '{ "result": "any" }'
           });
         }
@@ -1280,8 +1305,8 @@ export class Agent {
 
     let doc = '\n\nDelegation actions (to team members):\n';
     for (const cap of capabilities) {
-      // Build delegation description with inferred return type
-      doc += `- { "actionType": "delegate", "intent": "${cap.intent}", "data": ... } - ${cap.description} → Returns: ${cap.returnType} (Delegate to ${cap.agent} [${cap.role}])\n`;
+      // Build delegation description with inferred metadata
+      doc += `- { "actionType": "delegate", "intent": "${cap.intent}", "data": ${cap.inputParams} } - ${cap.description} → Returns: ${cap.returnType} (Delegate to ${cap.agent} [${cap.role}])\n`;
     }
 
     return doc;

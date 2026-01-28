@@ -38,11 +38,6 @@ export class IncrementalJSONParser {
         }
       } else {
         // Haven't found actions array yet, wait for more data
-        if (process.env.KOI_DEBUG_LLM && this.buffer.length > 50) {
-          // Show first 100 chars of buffer to debug what LLM is generating
-          const preview = this.buffer.substring(0, 100).replace(/\n/g, '\\n');
-          console.error(`[IncrementalParser] ⏳ Waiting for "actions" array (buffer: ${this.buffer.length} chars, preview: "${preview}...")`);
-        }
         return actions;
       }
     }

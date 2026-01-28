@@ -125,6 +125,10 @@ export default {
           if (nestedAction.id) {
             iterationContext[nestedAction.id] = { output: resultForContext };
 
+            // CRITICAL: Propagate action ID results back to parent context
+            // so template variables like ${right_turn.output.answer} work outside the repeat
+            context[nestedAction.id] = { output: resultForContext };
+
             if (process.env.KOI_DEBUG_LLM) {
               console.error(`[repeat] Stored result for ID "${nestedAction.id}":`, JSON.stringify(resultForContext));
             }

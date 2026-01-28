@@ -325,28 +325,25 @@ CRITICAL: When delegating work that involves MULTIPLE items (e.g., "create these
 OUTPUT: { "actions": [...] }
 
 CRITICAL RULES:
-1. Dynamic content (random/relacionado/based on) → call_llm FIRST, then use \${id.output.result}
+1. call_llm: ONLY when playbook says "random", "relacionado", "based on", "adapted", "generate question". If playbook can generate content directly, do NOT use call_llm.
 2. Loops: "hasta que se despida" → while with llm_eval condition
-3. Loop structure: initial question BEFORE while → registry_set BEFORE while → while loop (registry_get → call_llm → prompt_user → registry_set → print)
-4. IDs: CRITICAL - Actions MUST have "id" field if their output will be referenced via \${id.output} in ANY subsequent action. Before finalizing JSON, scan ALL actions and verify every \${variable.output} reference has a corresponding action with "id": "variable". If you reference \${name.output.answer}, the earlier action MUST have "id": "name"
-5. Template variables ONLY in strings: "text \${var}" not \${var}
-6. Group consecutive prints with \\n
-7. User feedback: Add "desc" field in English gerund form WITHOUT trailing dots. Make it natural and conversational, NOT technical/explicit (e.g., "Analyzing your response", "Processing your message", "Understanding what you said"). Avoid exposing implementation details. Animated spinner added automatically. If omitted, shows "Thinking"
+3. IDs: Actions MUST have "id" if output will be referenced via \${id.output}
+4. Template variables ONLY in strings: "text \${var}" not \${var}
+5. Group consecutive prints with \\n
 
 WHILE LOOP EXAMPLE:
-{ "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
-{ "intent": "registry_set", "key": "last", "value": "\${a1.output.answer}" },
+{ "id": "name", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+{ "intent": "registry_set", "key": "last", "value": "\${name.output.answer}" },
 { "intent": "while",
-  "condition": { "llm_eval": true, "desc": "Processing your response", "instruction": "¿Continuar? (false si despedida)", "data": "\${a3.output.answer}" },
+  "condition": { "llm_eval": true, "instruction": "¿Continuar?", "data": "\${response.output.answer}" },
   "actions": [
     { "id": "prev", "intent": "registry_get", "key": "last" },
-    { "id": "a2", "intent": "call_llm", "desc": "Thinking of next question", "data": {"answer":"\${prev.output.value}"}, "instruction": "Generate question related to answer" },
-    { "id": "a3", "intent": "prompt_user", "question": "\${a2.output.result}" },
-    { "intent": "registry_set", "key": "last", "value": "\${a3.output.answer}" },
-    { "intent": "print", "message": "Interesante: \${a3.output.answer}" }
+    { "id": "question", "intent": "call_llm", "data": {"answer":"\${prev.output.value}"}, "instruction": "Generate related question" },
+    { "id": "response", "intent": "prompt_user", "question": "\${question.output.result}" },
+    { "intent": "registry_set", "key": "last", "value": "\${response.output.answer}" }
   ]
 }
-CRITICAL: condition.data MUST be the ID from prompt_user INSIDE the loop (a3), NOT from outside (a1)
+CRITICAL: condition.data uses ID from prompt_user INSIDE loop ("response"), NOT from outside ("name")
 
 Available actions:
 ${actionRegistry.generatePromptDocumentation(agent)}
@@ -354,18 +351,11 @@ ${hasTeams && agent ? await agent.getPeerCapabilitiesAsActions() : ''}
 
 ${hasTeams ? `\nIMPORTANT: Do NOT nest "intent" inside "data". The "intent" field must be at the top level.` : ''}
 
-Data chaining with action outputs:
-- Use \${a1.output.field} to reference the output of action a1
-- Template variables can ONLY be used INSIDE strings
-- NEVER use template variables as direct values: { "count": \${a1.output.length} } ❌ WRONG
-- ALWAYS quote them: { "count": "\${a1.output.length}" } ✅ CORRECT
-- NEVER use the word "undefined" in JSON - use null or a string instead
-
-Examples:
-- \${a1.output.count} - Access count field from action a1
-- \${a2.output.users} - Access users array from action a2
-- \${a3.output.users[0].name} - Access nested field
-- After action a5 executes, you can reference \${a5.output} in subsequent actions
+Data chaining:
+- Reference action outputs: \${actionId.output.field}
+- Template variables ONLY in strings: { "count": "\${user.output.length}" } ✅ NOT { "count": \${user.output.length} } ❌
+- Use descriptive IDs: "user", "question", "response", NOT "a1", "a2", "a3"
+- Examples: \${user.output.name}, \${question.output.result}, \${response.output.answer}
 
 CRITICAL: When instructions say "Do NOT add print actions", follow that EXACTLY - only generate the actions listed in the steps.
 When using "return" actions with data containing template variables, do NOT add intermediate print actions - they will break the data chain.
@@ -671,28 +661,25 @@ You respond with valid JSON only. No markdown, no code blocks, no explanations.`
 OUTPUT: { "actions": [...] }
 
 CRITICAL RULES:
-1. Dynamic content (random/relacionado/based on) → call_llm FIRST, then use \${id.output.result}
+1. call_llm: ONLY when playbook says "random", "relacionado", "based on", "adapted", "generate question". If playbook can generate content directly, do NOT use call_llm.
 2. Loops: "hasta que se despida" → while with llm_eval condition
-3. Loop structure: initial question BEFORE while → registry_set BEFORE while → while loop (registry_get → call_llm → prompt_user → registry_set → print)
-4. IDs: CRITICAL - Actions MUST have "id" field if their output will be referenced via \${id.output} in ANY subsequent action. Before finalizing JSON, scan ALL actions and verify every \${variable.output} reference has a corresponding action with "id": "variable". If you reference \${name.output.answer}, the earlier action MUST have "id": "name"
-5. Template variables ONLY in strings: "text \${var}" not \${var}
-6. Group consecutive prints with \\n
-7. User feedback: Add "desc" field in English gerund form WITHOUT trailing dots. Make it natural and conversational, NOT technical/explicit (e.g., "Analyzing your response", "Processing your message", "Understanding what you said"). Avoid exposing implementation details. Animated spinner added automatically. If omitted, shows "Thinking"
+3. IDs: Actions MUST have "id" if output will be referenced via \${id.output}
+4. Template variables ONLY in strings: "text \${var}" not \${var}
+5. Group consecutive prints with \\n
 
 WHILE LOOP EXAMPLE:
-{ "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
-{ "intent": "registry_set", "key": "last", "value": "\${a1.output.answer}" },
+{ "id": "name", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+{ "intent": "registry_set", "key": "last", "value": "\${name.output.answer}" },
 { "intent": "while",
-  "condition": { "llm_eval": true, "desc": "Processing your response", "instruction": "¿Continuar? (false si despedida)", "data": "\${a3.output.answer}" },
+  "condition": { "llm_eval": true, "instruction": "¿Continuar?", "data": "\${response.output.answer}" },
   "actions": [
     { "id": "prev", "intent": "registry_get", "key": "last" },
-    { "id": "a2", "intent": "call_llm", "desc": "Thinking of next question", "data": {"answer":"\${prev.output.value}"}, "instruction": "Generate question related to answer" },
-    { "id": "a3", "intent": "prompt_user", "question": "\${a2.output.result}" },
-    { "intent": "registry_set", "key": "last", "value": "\${a3.output.answer}" },
-    { "intent": "print", "message": "Interesante: \${a3.output.answer}" }
+    { "id": "question", "intent": "call_llm", "data": {"answer":"\${prev.output.value}"}, "instruction": "Generate related question" },
+    { "id": "response", "intent": "prompt_user", "question": "\${question.output.result}" },
+    { "intent": "registry_set", "key": "last", "value": "\${response.output.answer}" }
   ]
 }
-CRITICAL: condition.data MUST be the ID from prompt_user INSIDE the loop (a3), NOT from outside (a1)
+CRITICAL: condition.data uses ID from prompt_user INSIDE loop ("response"), NOT from outside ("name")
 
 Available actions:
 ${actionRegistry.generatePromptDocumentation(agent)}
@@ -700,18 +687,11 @@ ${hasTeams && agent ? await agent.getPeerCapabilitiesAsActions() : ''}
 
 ${hasTeams ? `\nIMPORTANT: Do NOT nest "intent" inside "data". The "intent" field must be at the top level.` : ''}
 
-Data chaining with action outputs:
-- Use \${a1.output.field} to reference the output of action a1
-- Template variables can ONLY be used INSIDE strings
-- NEVER use template variables as direct values: { "count": \${a1.output.length} } ❌ WRONG
-- ALWAYS quote them: { "count": "\${a1.output.length}" } ✅ CORRECT
-- NEVER use the word "undefined" in JSON - use null or a string instead
-
-Examples:
-- \${a1.output.count} - Access count field from action a1
-- \${a2.output.users} - Access users array from action a2
-- \${a3.output.users[0].name} - Access nested field
-- After action a5 executes, you can reference \${a5.output} in subsequent actions
+Data chaining:
+- Reference action outputs: \${actionId.output.field}
+- Template variables ONLY in strings: { "count": "\${user.output.length}" } ✅ NOT { "count": \${user.output.length} } ❌
+- Use descriptive IDs: "user", "question", "response", NOT "a1", "a2", "a3"
+- Examples: \${user.output.name}, \${question.output.result}, \${response.output.answer}
 
 CRITICAL: When instructions say "Do NOT add print actions", follow that EXACTLY - only generate the actions listed in the steps.
 When using "return" actions with data containing template variables, do NOT add intermediate print actions - they will break the data chain.
@@ -755,28 +735,25 @@ REMEMBER: Include print actions for ALL output the user should see, UNLESS the i
 OUTPUT: { "actions": [...] }
 
 CRITICAL RULES:
-1. Dynamic content (random/relacionado/based on) → call_llm FIRST, then use \${id.output.result}
+1. call_llm: ONLY when playbook says "random", "relacionado", "based on", "adapted", "generate question". If playbook can generate content directly, do NOT use call_llm.
 2. Loops: "hasta que se despida" → while with llm_eval condition
-3. Loop structure: initial question BEFORE while → registry_set BEFORE while → while loop (registry_get → call_llm → prompt_user → registry_set → print)
-4. IDs: CRITICAL - Actions MUST have "id" field if their output will be referenced via \${id.output} in ANY subsequent action. Before finalizing JSON, scan ALL actions and verify every \${variable.output} reference has a corresponding action with "id": "variable". If you reference \${name.output.answer}, the earlier action MUST have "id": "name"
-5. Template variables ONLY in strings: "text \${var}" not \${var}
-6. Group consecutive prints with \\n
-7. User feedback: Add "desc" field in English gerund form WITHOUT trailing dots. Make it natural and conversational, NOT technical/explicit (e.g., "Analyzing your response", "Processing your message", "Understanding what you said"). Avoid exposing implementation details. Animated spinner added automatically. If omitted, shows "Thinking"
+3. IDs: Actions MUST have "id" if output will be referenced via \${id.output}
+4. Template variables ONLY in strings: "text \${var}" not \${var}
+5. Group consecutive prints with \\n
 
 WHILE LOOP EXAMPLE:
-{ "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
-{ "intent": "registry_set", "key": "last", "value": "\${a1.output.answer}" },
+{ "id": "name", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+{ "intent": "registry_set", "key": "last", "value": "\${name.output.answer}" },
 { "intent": "while",
-  "condition": { "llm_eval": true, "desc": "Processing your response", "instruction": "¿Continuar? (false si despedida)", "data": "\${a3.output.answer}" },
+  "condition": { "llm_eval": true, "instruction": "¿Continuar?", "data": "\${response.output.answer}" },
   "actions": [
     { "id": "prev", "intent": "registry_get", "key": "last" },
-    { "id": "a2", "intent": "call_llm", "desc": "Thinking of next question", "data": {"answer":"\${prev.output.value}"}, "instruction": "Generate question related to answer" },
-    { "id": "a3", "intent": "prompt_user", "question": "\${a2.output.result}" },
-    { "intent": "registry_set", "key": "last", "value": "\${a3.output.answer}" },
-    { "intent": "print", "message": "Interesante: \${a3.output.answer}" }
+    { "id": "question", "intent": "call_llm", "data": {"answer":"\${prev.output.value}"}, "instruction": "Generate related question" },
+    { "id": "response", "intent": "prompt_user", "question": "\${question.output.result}" },
+    { "intent": "registry_set", "key": "last", "value": "\${response.output.answer}" }
   ]
 }
-CRITICAL: condition.data MUST be the ID from prompt_user INSIDE the loop (a3), NOT from outside (a1)
+CRITICAL: condition.data uses ID from prompt_user INSIDE loop ("response"), NOT from outside ("name")
 
 Available actions:
 ${actionRegistry.generatePromptDocumentation(agent)}
@@ -784,18 +761,11 @@ ${hasTeams && agent ? await agent.getPeerCapabilitiesAsActions() : ''}
 
 ${hasTeams ? `\nIMPORTANT: Do NOT nest "intent" inside "data". The "intent" field must be at the top level.` : ''}
 
-Data chaining with action outputs:
-- Use \${a1.output.field} to reference the output of action a1
-- Template variables can ONLY be used INSIDE strings
-- NEVER use template variables as direct values: { "count": \${a1.output.length} } ❌ WRONG
-- ALWAYS quote them: { "count": "\${a1.output.length}" } ✅ CORRECT
-- NEVER use the word "undefined" in JSON - use null or a string instead
-
-Examples:
-- \${a1.output.count} - Access count field from action a1
-- \${a2.output.users} - Access users array from action a2
-- \${a3.output.users[0].name} - Access nested field
-- After action a5 executes, you can reference \${a5.output} in subsequent actions
+Data chaining:
+- Reference action outputs: \${actionId.output.field}
+- Template variables ONLY in strings: { "count": "\${user.output.length}" } ✅ NOT { "count": \${user.output.length} } ❌
+- Use descriptive IDs: "user", "question", "response", NOT "a1", "a2", "a3"
+- Examples: \${user.output.name}, \${question.output.result}, \${response.output.answer}
 
 CRITICAL: When instructions say "Do NOT add print actions", follow that EXACTLY - only generate the actions listed in the steps.
 When using "return" actions with data containing template variables, do NOT add intermediate print actions - they will break the data chain.
@@ -984,28 +954,25 @@ REMEMBER: Include print actions for ALL output the user should see, UNLESS the i
 OUTPUT: { "actions": [...] }
 
 CRITICAL RULES:
-1. Dynamic content (random/relacionado/based on) → call_llm FIRST, then use \${id.output.result}
+1. call_llm: ONLY when playbook says "random", "relacionado", "based on", "adapted", "generate question". If playbook can generate content directly, do NOT use call_llm.
 2. Loops: "hasta que se despida" → while with llm_eval condition
-3. Loop structure: initial question BEFORE while → registry_set BEFORE while → while loop (registry_get → call_llm → prompt_user → registry_set → print)
-4. IDs: CRITICAL - Actions MUST have "id" field if their output will be referenced via \${id.output} in ANY subsequent action. Before finalizing JSON, scan ALL actions and verify every \${variable.output} reference has a corresponding action with "id": "variable". If you reference \${name.output.answer}, the earlier action MUST have "id": "name"
-5. Template variables ONLY in strings: "text \${var}" not \${var}
-6. Group consecutive prints with \\n
-7. User feedback: Add "desc" field in English gerund form WITHOUT trailing dots. Make it natural and conversational, NOT technical/explicit (e.g., "Analyzing your response", "Processing your message", "Understanding what you said"). Avoid exposing implementation details. Animated spinner added automatically. If omitted, shows "Thinking"
+3. IDs: Actions MUST have "id" if output will be referenced via \${id.output}
+4. Template variables ONLY in strings: "text \${var}" not \${var}
+5. Group consecutive prints with \\n
 
 WHILE LOOP EXAMPLE:
-{ "id": "a1", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
-{ "intent": "registry_set", "key": "last", "value": "\${a1.output.answer}" },
+{ "id": "name", "intent": "prompt_user", "question": "¿Cuál es tu nombre?" },
+{ "intent": "registry_set", "key": "last", "value": "\${name.output.answer}" },
 { "intent": "while",
-  "condition": { "llm_eval": true, "desc": "Processing your response", "instruction": "¿Continuar? (false si despedida)", "data": "\${a3.output.answer}" },
+  "condition": { "llm_eval": true, "instruction": "¿Continuar?", "data": "\${response.output.answer}" },
   "actions": [
     { "id": "prev", "intent": "registry_get", "key": "last" },
-    { "id": "a2", "intent": "call_llm", "desc": "Thinking of next question", "data": {"answer":"\${prev.output.value}"}, "instruction": "Generate question related to answer" },
-    { "id": "a3", "intent": "prompt_user", "question": "\${a2.output.result}" },
-    { "intent": "registry_set", "key": "last", "value": "\${a3.output.answer}" },
-    { "intent": "print", "message": "Interesante: \${a3.output.answer}" }
+    { "id": "question", "intent": "call_llm", "data": {"answer":"\${prev.output.value}"}, "instruction": "Generate related question" },
+    { "id": "response", "intent": "prompt_user", "question": "\${question.output.result}" },
+    { "intent": "registry_set", "key": "last", "value": "\${response.output.answer}" }
   ]
 }
-CRITICAL: condition.data MUST be the ID from prompt_user INSIDE the loop (a3), NOT from outside (a1)
+CRITICAL: condition.data uses ID from prompt_user INSIDE loop ("response"), NOT from outside ("name")
 
 Available actions:
 ${actionRegistry.generatePromptDocumentation(agent)}
@@ -1013,18 +980,11 @@ ${hasTeams && agent ? await agent.getPeerCapabilitiesAsActions() : ''}
 
 ${hasTeams ? `\nIMPORTANT: Do NOT nest "intent" inside "data". The "intent" field must be at the top level.` : ''}
 
-Data chaining with action outputs:
-- Use \${a1.output.field} to reference the output of action a1
-- Template variables can ONLY be used INSIDE strings
-- NEVER use template variables as direct values: { "count": \${a1.output.length} } ❌ WRONG
-- ALWAYS quote them: { "count": "\${a1.output.length}" } ✅ CORRECT
-- NEVER use the word "undefined" in JSON - use null or a string instead
-
-Examples:
-- \${a1.output.count} - Access count field from action a1
-- \${a2.output.users} - Access users array from action a2
-- \${a3.output.users[0].name} - Access nested field
-- After action a5 executes, you can reference \${a5.output} in subsequent actions
+Data chaining:
+- Reference action outputs: \${actionId.output.field}
+- Template variables ONLY in strings: { "count": "\${user.output.length}" } ✅ NOT { "count": \${user.output.length} } ❌
+- Use descriptive IDs: "user", "question", "response", NOT "a1", "a2", "a3"
+- Examples: \${user.output.name}, \${question.output.result}, \${response.output.answer}
 
 CRITICAL: When instructions say "Do NOT add print actions", follow that EXACTLY - only generate the actions listed in the steps.
 When using "return" actions with data containing template variables, do NOT add intermediate print actions - they will break the data chain.
