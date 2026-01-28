@@ -11,6 +11,8 @@ export class IncrementalJSONParser {
     this.actionsStartIndex = -1; // Position where "actions":[ was found
     this.lastParsedIndex = 0; // Last position we successfully parsed up to
     this.parsedActions = 0; // Count of actions we've parsed
+    this.pendingObjectEnd = -1; // Position where a potential complete object ended (} char)
+    this.pendingObjectStart = -1; // Start position of the pending object
   }
 
   /**
@@ -87,31 +89,44 @@ export class IncrementalJSONParser {
       } else if (char === '}') {
         depth--;
         if (depth === 0 && objectStart !== -1) {
-          // Complete action object found!
-          const actionJSON = this.buffer.substring(objectStart, i + 1);
-          try {
-            const action = JSON.parse(actionJSON);
-            actions.push(action);
-            this.parsedActions++;
-            this.lastParsedIndex = i + 1;
-
-            if (process.env.KOI_DEBUG_LLM) {
-              console.error(`[IncrementalParser] ✅ Parsed action #${this.parsedActions}: ${action.intent || action.type || 'unknown'}`);
-            }
-          } catch (e) {
-            // Failed to parse - might be incomplete, wait for more data
-            if (process.env.KOI_DEBUG_LLM) {
-              console.error(`[IncrementalParser] ⚠️  Failed to parse object at ${objectStart}: ${e.message}`);
-            }
-          }
+          // Potential complete object - save position but wait for delimiter
+          this.pendingObjectEnd = i;
+          this.pendingObjectStart = objectStart;
           objectStart = -1;
         }
-      } else if (char === ']' && depth === 0) {
-        // End of actions array
-        if (process.env.KOI_DEBUG_LLM) {
-          console.error(`[IncrementalParser] 🏁 End of actions array reached`);
+      } else if ((char === ',' || char === ']') && depth === 0) {
+        // Delimiter found - if we have a pending object, parse it now
+        if (this.pendingObjectEnd !== -1) {
+          const actionJSON = this.buffer.substring(this.pendingObjectStart, this.pendingObjectEnd + 1);
+
+          try {
+            const action = JSON.parse(actionJSON);
+
+            actions.push(action);
+            this.parsedActions++;
+            this.lastParsedIndex = this.pendingObjectEnd + 1;
+
+            if (process.env.KOI_DEBUG_LLM) {
+              console.error(`[IncrementalParser] ✅ Parsed action #${this.parsedActions}: ${action.intent || action.type || 'unknown'}${action.id ? ` (id: ${action.id})` : ''}`);
+            }
+          } catch (e) {
+            // Failed to parse - might be malformed JSON
+            if (process.env.KOI_DEBUG_LLM) {
+              console.error(`[IncrementalParser] ⚠️  Failed to parse object at ${this.pendingObjectStart}: ${e.message}`);
+            }
+          }
+
+          this.pendingObjectEnd = -1;
+          this.pendingObjectStart = -1;
         }
-        break;
+
+        // If this is the end of the array, stop parsing
+        if (char === ']') {
+          if (process.env.KOI_DEBUG_LLM) {
+            console.error(`[IncrementalParser] 🏁 End of actions array reached`);
+          }
+          break;
+        }
       }
     }
 

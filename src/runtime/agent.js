@@ -234,17 +234,7 @@ export class Agent {
 
       // Execute action immediately (sequential execution for proper chaining)
       try {
-        if (process.env.KOI_DEBUG_LLM) {
-          console.error(`[Agent:${this.name}] 🔄 Resolving references for action: ${action.intent || action.type}`);
-          if (action.message) {
-            console.error(`[Agent:${this.name}] 📝 Before resolution: message = ${action.message}`);
-          }
-          console.error(`[Agent:${this.name}] 📦 Context keys: ${Object.keys(actionContext).filter(k => k !== 'state' && k !== 'results' && k !== 'args').join(', ')}`);
-        }
         const resolvedAction = this.resolveActionReferences(action, actionContext);
-        if (process.env.KOI_DEBUG_LLM && action.message) {
-          console.error(`[Agent:${this.name}] ✅ After resolution: message = ${resolvedAction.message}`);
-        }
 
         // Check condition if present (but skip for actions that handle their own conditions internally)
         const actionsWithOwnConditions = ['if', 'while', 'repeat'];
@@ -590,10 +580,6 @@ export class Agent {
     // Deep clone to avoid mutating original
     const resolved = JSON.parse(JSON.stringify(action));
 
-    if (process.env.KOI_DEBUG_LLM) {
-      console.error(`[Agent:${this.name}] 🔄 Resolving references for action: ${action.intent || action.type}`);
-    }
-
     // DON'T resolve condition here - it will be evaluated directly in evaluateCondition()
     // (Conditions need special handling to preserve boolean expressions)
 
@@ -623,13 +609,7 @@ export class Agent {
 
     // Resolve references in message/text fields (for print action)
     if (resolved.message !== undefined) {
-      if (process.env.KOI_DEBUG_LLM) {
-        console.error(`[Agent:${this.name}] 🔍 Resolving message field: "${resolved.message}"`);
-      }
       resolved.message = this.resolveObjectReferences(resolved.message, context);
-      if (process.env.KOI_DEBUG_LLM) {
-        console.error(`[Agent:${this.name}] ✨ Resolved message field: "${resolved.message}"`);
-      }
     }
     if (resolved.text !== undefined) {
       resolved.text = this.resolveObjectReferences(resolved.text, context);

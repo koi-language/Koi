@@ -328,7 +328,7 @@ CRITICAL RULES:
 1. Dynamic content (random/relacionado/based on) → call_llm FIRST, then use \${id.output.result}
 2. Loops: "hasta que se despida" → while with llm_eval condition
 3. Loop structure: initial question BEFORE while → registry_set BEFORE while → while loop (registry_get → call_llm → prompt_user → registry_set → print)
-4. IDs: Add "id" only when you'll reference \${id.output} later
+4. IDs: CRITICAL - Actions MUST have "id" field if their output will be referenced via \${id.output} in ANY subsequent action. Before finalizing JSON, scan ALL actions and verify every \${variable.output} reference has a corresponding action with "id": "variable". If you reference \${name.output.answer}, the earlier action MUST have "id": "name"
 5. Template variables ONLY in strings: "text \${var}" not \${var}
 6. Group consecutive prints with \\n
 7. User feedback: Add "desc" field in English gerund form WITHOUT trailing dots. Make it natural and conversational, NOT technical/explicit (e.g., "Analyzing your response", "Processing your message", "Understanding what you said"). Avoid exposing implementation details. Animated spinner added automatically. If omitted, shows "Thinking"
@@ -674,7 +674,7 @@ CRITICAL RULES:
 1. Dynamic content (random/relacionado/based on) → call_llm FIRST, then use \${id.output.result}
 2. Loops: "hasta que se despida" → while with llm_eval condition
 3. Loop structure: initial question BEFORE while → registry_set BEFORE while → while loop (registry_get → call_llm → prompt_user → registry_set → print)
-4. IDs: Add "id" only when you'll reference \${id.output} later
+4. IDs: CRITICAL - Actions MUST have "id" field if their output will be referenced via \${id.output} in ANY subsequent action. Before finalizing JSON, scan ALL actions and verify every \${variable.output} reference has a corresponding action with "id": "variable". If you reference \${name.output.answer}, the earlier action MUST have "id": "name"
 5. Template variables ONLY in strings: "text \${var}" not \${var}
 6. Group consecutive prints with \\n
 7. User feedback: Add "desc" field in English gerund form WITHOUT trailing dots. Make it natural and conversational, NOT technical/explicit (e.g., "Analyzing your response", "Processing your message", "Understanding what you said"). Avoid exposing implementation details. Animated spinner added automatically. If omitted, shows "Thinking"
@@ -758,7 +758,7 @@ CRITICAL RULES:
 1. Dynamic content (random/relacionado/based on) → call_llm FIRST, then use \${id.output.result}
 2. Loops: "hasta que se despida" → while with llm_eval condition
 3. Loop structure: initial question BEFORE while → registry_set BEFORE while → while loop (registry_get → call_llm → prompt_user → registry_set → print)
-4. IDs: Add "id" only when you'll reference \${id.output} later
+4. IDs: CRITICAL - Actions MUST have "id" field if their output will be referenced via \${id.output} in ANY subsequent action. Before finalizing JSON, scan ALL actions and verify every \${variable.output} reference has a corresponding action with "id": "variable". If you reference \${name.output.answer}, the earlier action MUST have "id": "name"
 5. Template variables ONLY in strings: "text \${var}" not \${var}
 6. Group consecutive prints with \\n
 7. User feedback: Add "desc" field in English gerund form WITHOUT trailing dots. Make it natural and conversational, NOT technical/explicit (e.g., "Analyzing your response", "Processing your message", "Understanding what you said"). Avoid exposing implementation details. Animated spinner added automatically. If omitted, shows "Thinking"
@@ -987,7 +987,7 @@ CRITICAL RULES:
 1. Dynamic content (random/relacionado/based on) → call_llm FIRST, then use \${id.output.result}
 2. Loops: "hasta que se despida" → while with llm_eval condition
 3. Loop structure: initial question BEFORE while → registry_set BEFORE while → while loop (registry_get → call_llm → prompt_user → registry_set → print)
-4. IDs: Add "id" only when you'll reference \${id.output} later
+4. IDs: CRITICAL - Actions MUST have "id" field if their output will be referenced via \${id.output} in ANY subsequent action. Before finalizing JSON, scan ALL actions and verify every \${variable.output} reference has a corresponding action with "id": "variable". If you reference \${name.output.answer}, the earlier action MUST have "id": "name"
 5. Template variables ONLY in strings: "text \${var}" not \${var}
 6. Group consecutive prints with \\n
 7. User feedback: Add "desc" field in English gerund form WITHOUT trailing dots. Make it natural and conversational, NOT technical/explicit (e.g., "Analyzing your response", "Processing your message", "Understanding what you said"). Avoid exposing implementation details. Animated spinner added automatically. If omitted, shows "Thinking"
