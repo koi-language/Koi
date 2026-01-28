@@ -1,0 +1,68 @@
+package "agent-dialogue"
+
+role Worker { can execute }
+role Coordinator { can execute, can delegate }
+
+Team TestTeam {
+  philosopher = Philosopher
+  poet = Poet
+}
+
+// Agente Filósofo que hace preguntas profundas
+Agent Philosopher : Worker {
+  llm default = { provider: "openai", model: "gpt-5.2" }
+
+  on ask(args: Json) {
+    playbook """
+    Eres un filósofo que hace preguntas profundas.
+
+    Contexto: ${args.context}
+
+    Genera UNA pregunta filosófica breve (máximo 2 oraciones).
+
+    Return ONLY: { "question": "tu pregunta aquí" }
+    """
+  }
+}
+
+// Agente Poeta que responde de manera poética
+Agent Poet : Worker {
+  llm default = { provider: "openai", model: "gpt-5.2" }
+
+  on respond(args: Json) {
+    playbook """
+    Eres un poeta que responde de manera metafórica.
+
+    Pregunta: "${args.question}"
+
+    Responde poéticamente (máximo 2 oraciones).
+
+    Return ONLY: { "answer": "tu respuesta aquí" }
+    """
+  }
+}
+
+// Coordinador que orquesta el diálogo
+Agent DialogueCoordinator : Coordinator {
+  llm default = { provider: "openai", model: "gpt-5.2" }
+
+  uses Team TestTeam
+
+  on startDialogue(args: Json) {
+    playbook """
+    Coordina un diálogo entre Filósofo y Poeta por 3 turnos.
+
+    En cada turno:
+    Primero haz que pregunte el filosofo una pregunta y luego que responda a esa pregunta el poeta.
+    Imprime el dialogo así:
+    - 🤔 Filósofo: <pregunta aqui>
+    - 🎭 Poeta: <respuesta aqui>
+
+    Al cabo de 3 rondas, finaliza mostrando:
+    ✨ Diálogo completado!
+
+    """
+  }
+}
+
+run DialogueCoordinator.startDialogue({})

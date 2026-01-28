@@ -122,35 +122,41 @@ export default {
       const displayText = resolvedAction.desc ? resolvedAction.desc.replace(/\.\.\.$/, '') : 'Thinking';
       cliLogger.planning(`[🤖 ${agent.name}] ${displayText}`);
 
-      // Get action definition
-      const actionDef = actionRegistry.get(nestedAction.intent || nestedAction.type);
-
-      if (actionDef && actionDef.execute) {
-        // Update agent's current context for nested action
-        const previousContext = agent._currentActionContext;
-        agent._currentActionContext = context;
-
-        // Execute with agent
-        result = await actionDef.execute(resolvedAction, agent);
-
-        // Restore previous context
-        agent._currentActionContext = previousContext;
-
-        cliLogger.clear();
-
-        // Update parent context with result
-        if (result && typeof result === 'object') {
-          const resultForContext = JSON.parse(JSON.stringify(result));
-          context.results.push(resultForContext);
-
-          // Store with action ID if provided
-          if (nestedAction.id) {
-            context[nestedAction.id] = { output: resultForContext };
-          }
-        }
+      // Check if this is a delegation action
+      if (resolvedAction.actionType === 'delegate') {
+        // Delegation: route to appropriate team member
+        result = await agent.resolveAction(resolvedAction, context);
       } else {
-        cliLogger.clear();
-        throw new Error(`Action ${nestedAction.intent || nestedAction.type} not found`);
+        // Direct action: Get action definition from registry
+        const actionDef = actionRegistry.get(nestedAction.intent || nestedAction.type);
+
+        if (actionDef && actionDef.execute) {
+          // Update agent's current context for nested action
+          const previousContext = agent._currentActionContext;
+          agent._currentActionContext = context;
+
+          // Execute with agent
+          result = await actionDef.execute(resolvedAction, agent);
+
+          // Restore previous context
+          agent._currentActionContext = previousContext;
+        } else {
+          cliLogger.clear();
+          throw new Error(`Action ${nestedAction.intent || nestedAction.type} not found`);
+        }
+      }
+
+      cliLogger.clear();
+
+      // Update parent context with result
+      if (result && typeof result === 'object') {
+        const resultForContext = JSON.parse(JSON.stringify(result));
+        context.results.push(resultForContext);
+
+        // Store with action ID if provided
+        if (nestedAction.id) {
+          context[nestedAction.id] = { output: resultForContext };
+        }
       }
     }
 

@@ -200,14 +200,59 @@ export class KoiTranspiler {
       }
     }
 
-    // Generate all declarations in original order (except RunStatements)
-    // This preserves dependencies between roles, teams, and agents
+    // Generate declarations in dependency order to prevent forward reference errors
+    // Strategy: Roles -> Agents (without Team deps) -> Teams -> Agents (with Team deps)
     this.skipAgentRegistration = true;
+
+    // First: Generate Roles
     for (const decl of node.declarations) {
-      if (decl.type !== 'RunStatement') {
+      if (decl.type === 'RoleDecl') {
         code += this.generateDeclaration(decl);
       }
     }
+
+    // Second: Generate Agents that DON'T use Teams, and Skills
+    for (const decl of node.declarations) {
+      if (decl.type === 'AgentDecl') {
+        // Check if this agent uses any teams (look in body)
+        const usesTeams = decl.body && decl.body.filter(b => b.type === 'UsesTeam').length > 0;
+        if (!usesTeams) {
+          code += this.generateDeclaration(decl);
+        }
+      } else if (decl.type === 'SkillDecl') {
+        code += this.generateDeclaration(decl);
+      }
+    }
+
+    // Third: Generate Teams (which may reference Agents generated above)
+    for (const decl of node.declarations) {
+      if (decl.type === 'TeamDecl') {
+        code += this.generateDeclaration(decl);
+      }
+    }
+
+    // Fourth: Generate Agents that DO use Teams
+    for (const decl of node.declarations) {
+      if (decl.type === 'AgentDecl') {
+        // Check if this agent uses any teams (look in body)
+        const usesTeams = decl.body && decl.body.filter(b => b.type === 'UsesTeam').length > 0;
+        if (usesTeams) {
+          code += this.generateDeclaration(decl);
+        }
+      }
+    }
+
+    // Finally: Generate any other declarations (imports, etc.)
+    for (const decl of node.declarations) {
+      if (decl.type !== 'RunStatement' &&
+          decl.type !== 'RoleDecl' &&
+          decl.type !== 'AgentDecl' &&
+          decl.type !== 'SkillDecl' &&
+          decl.type !== 'TeamDecl') {
+        code += this.generateDeclaration(decl);
+      }
+    }
+
     this.skipAgentRegistration = false;
 
     // Generate main async function that coordinates everything
