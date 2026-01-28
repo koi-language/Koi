@@ -52,15 +52,20 @@ Agent DialogueCoordinator : Coordinator {
     playbook """
     Coordina un diálogo entre Filósofo y Poeta por 3 turnos.
 
-    En cada turno:
-    Primero haz que pregunte el filosofo una pregunta y luego que responda a esa pregunta el poeta.
-    Imprime el dialogo así:
-    - 🤔 Filósofo: <pregunta aqui>
-    - 🎭 Poeta: <respuesta aqui>
+    Use repeat action with count: 3. Inside repeat, for EACH iteration:
 
-    Al cabo de 3 rondas, finaliza mostrando:
+    EXACT STEPS (use same IDs in all iterations):
+    1. Delegate to Philosopher with intent "ask", data: { context: "" }, store with id "q"
+    2. Delegate to Poet with intent "respond", data: { question: "${q.output.question}" }, store with id "a"
+    3. Print dialogue (Philosopher's question has field "question", Poet's answer has field "answer"):
+       - 🤔 Filósofo: ${q.output.question}
+       - 🎭 Poeta: ${a.output.answer}
+
+    CRITICAL: Inside repeat, each iteration has its own context. Use same IDs (q, a) in each iteration.
+    The repeat action will handle context scoping automatically.
+
+    After the repeat completes, print:
     ✨ Diálogo completado!
-
     """
   }
 }
